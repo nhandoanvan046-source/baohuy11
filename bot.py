@@ -1,55 +1,42 @@
 import os
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler,
-                          CallbackQueryHandler, ContextTypes, filters)
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 from dotenv import load_dotenv
 from keep_alive import keep_alive
 
+# Load cấu hình từ .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
+# Giữ bot sống (cho Replit, Glitch...)
 keep_alive()
 
-# ========== Khởi tạo ==========
+# Khởi tạo thư mục và file
 os.makedirs("data", exist_ok=True)
+os.makedirs("data/cache_img", exist_ok=True)
 for f in ["acc.json", "user.json", "log.json", "duyet_log.json", "admins.json"]:
     path = f"data/{f}"
     if not os.path.exists(path):
         with open(path, "w") as fp:
             json.dump({} if "user" in f or "admins" in f else [], fp)
 
-os.makedirs("data/cache_img", exist_ok=True)
-
-# ========== Hàm tiện ích ==========
-def load_json(path): return json.load(open(path, "r"))
-def save_json(path, data): json.dump(data, open(path, "w"), indent=2)
+# Hàm tiện ích
+load_json = lambda path: json.load(open(path))
+save_json = lambda path, data: json.dump(data, open(path, "w"), indent=2)
 def is_admin(uid):
-    if uid == ADMIN_ID: return True
-    admins = load_json("data/admins.json")
-    return str(uid) in admins
+    return uid == ADMIN_ID or str(uid) in load_json("data/admins.json")
 
-# ========== Giao diện ==========
+# Giao diện chính
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎮 Chào mừng đến với shop acc Liên Quân!\n\n"
-        "🛒 Người dùng:\n"
-        "/random - Mua acc random\n"
-        "/myacc - Acc đã mua\n"
-        "/sodu - Kiểm tra số dư\n"
-        "/nap <sotien> - Nạp tiền\n"
-        "/top - TOP người giàu\n\n"
-        "🛠 Quản trị:\n"
-        "/addacc <user> <pass>\n"
-        "/delacc <id>\n"
-        "/cong <uid> <sotien>\n"
-        "/tru <uid> <sotien>\n"
-        "/stats - Thống kê\n"
-        "/addadmin <uid>"
+        "🛒 Người dùng:\n/random - Mua acc random\n/myacc - Acc đã mua\n/sodu - Kiểm tra số dư\n/nap <sotien> - Nạp tiền\n/top - TOP người giàu\n\n"
+        "🛠 Quản trị:\n/addacc <user> <pass>\n/delacc <id>\n/cong <uid> <sotien>\n/tru <uid> <sotien>\n/stats\n/addadmin <uid>"
     )
 
-# ========== Người dùng ==========
+# Các lệnh người dùng
 async def sodu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     users = load_json("data/user.json")
@@ -60,16 +47,20 @@ async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Dùng đúng cú pháp: /nap <sotien>")
         return
     sotien = context.args[0]
-    await update.message.reply_text("📤 Vui lòng gửi ảnh chuyển khoản với caption: \n" + sotien)
+    uid = update.effective_user.id
+    await update.message.reply_text(
+        f"💳 Vui lòng chuyển khoản theo thông tin sau:\n\n"
+        f"- 📲 STK: 0971487462\n- 🏦 Ngân hàng: MB Bank\n- 💬 Nội dung: {uid}\n- 💰 Số tiền: {sotien} VND\n\n"
+        f"📸 Sau đó gửi ảnh chuyển khoản vào bot để admin duyệt."
+    )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     caption = update.message.caption or "Không rõ"
     file_id = update.message.photo[-1].file_id
     file = await context.bot.get_file(file_id)
-    path = f"data/cache_img/{uid}.jpg"
-    await file.download_to_drive(path)
-    
+    await file.download_to_drive(f"data/cache_img/{uid}.jpg")
+
     markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Duyệt", callback_data=f"duyet:{uid}:{caption}"),
@@ -85,7 +76,7 @@ async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_json("data/user.json")
     accs = load_json("data/acc.json")
     log = load_json("data/log.json")
-    
+
     if users.get(uid, 0) < 2000:
         await update.message.reply_text("⚠️ Bạn cần 2.000đ để mua acc.")
         return
@@ -94,9 +85,9 @@ async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     acc = accs.pop(0)
-    users[uid] -= 2000
+    users[uid] = users.get(uid, 0) - 2000
     log.append({"uid": uid, "acc": acc})
-    
+
     save_json("data/user.json", users)
     save_json("data/acc.json", accs)
     save_json("data/log.json", log)
@@ -114,31 +105,37 @@ async def myacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_json("data/user.json")
+    if not users:
+        await update.message.reply_text("📭 Chưa có người dùng nào nạp tiền.")
+        return
     top_users = sorted(users.items(), key=lambda x: x[1], reverse=True)[:10]
     msg = "🏆 Top người dùng giàu nhất:\n"
     for i, (uid, bal) in enumerate(top_users):
         msg += f"{i+1}. UID {uid} - {bal:,}đ\n"
     await update.message.reply_text(msg)
 
-# ========== Admin ==========
+# Admin
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
-    if data.startswith("duyet"):
-        _, uid, sotien = data.split(":")
-        users = load_json("data/user.json")
-        logs = load_json("data/duyet_log.json")
-        users[uid] = users.get(uid, 0) + int(sotien)
-        logs.append({"uid": uid, "status": "Duyệt", "amount": int(sotien)})
-        save_json("data/user.json", users)
-        save_json("data/duyet_log.json", logs)
-        await context.bot.send_message(chat_id=int(uid), text=f"✅ Admin đã duyệt nạp {sotien}đ!")
-        await query.edit_message_caption(f"✅ Đã duyệt nạp {sotien}đ cho UID {uid}")
-    elif data.startswith("huy"):
-        _, uid = data.split(":")
-        await context.bot.send_message(chat_id=int(uid), text="❌ Yêu cầu nạp bị từ chối.")
-        await query.edit_message_caption("❌ Đã từ chối yêu cầu nạp tiền.")
+    try:
+        if data.startswith("duyet"):
+            _, uid, sotien = data.split(":")
+            users = load_json("data/user.json")
+            logs = load_json("data/duyet_log.json")
+            users[uid] = users.get(uid, 0) + int(sotien)
+            logs.append({"uid": uid, "status": "Duyệt", "amount": int(sotien)})
+            save_json("data/user.json", users)
+            save_json("data/duyet_log.json", logs)
+            await context.bot.send_message(chat_id=int(uid), text=f"✅ Admin đã duyệt nạp {sotien}đ!")
+            await query.edit_message_caption(f"✅ Đã duyệt nạp {sotien}đ cho UID {uid}")
+        elif data.startswith("huy"):
+            _, uid = data.split(":")
+            await context.bot.send_message(chat_id=int(uid), text="❌ Yêu cầu nạp bị từ chối.")
+            await query.edit_message_caption("❌ Đã từ chối yêu cầu nạp tiền.")
+    except Exception as e:
+        await query.edit_message_caption(f"❌ Lỗi xử lý: {e}")
 
 async def addacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id): return
@@ -157,8 +154,7 @@ async def delacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     accs = load_json("data/acc.json")
     try:
-        idx = int(context.args[0]) - 1
-        acc = accs.pop(idx)
+        acc = accs.pop(int(context.args[0]) - 1)
         save_json("data/acc.json", accs)
         await update.message.reply_text(f"✅ Đã xoá acc: {acc['user']}")
     except:
@@ -193,8 +189,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log = load_json("data/log.json")
     total_bal = sum(users.values())
     await update.message.reply_text(
-        f"📊 Thống kê:\n- Người dùng: {len(users)}\n- Số dư tổng: {total_bal:,}đ\n"
-        f"- Acc còn: {len(accs)}\n- Acc đã bán: {len(log)}"
+        f"📊 Thống kê:\n- Người dùng: {len(users)}\n- Số dư tổng: {total_bal:,}đ\n- Acc còn: {len(accs)}\n- Acc đã bán: {len(log)}"
     )
 
 async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -208,7 +203,7 @@ async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json("data/admins.json", admins)
     await update.message.reply_text(f"✅ Đã thêm admin UID {uid}.")
 
-# ========== Khởi chạy ==========
+# Khởi chạy bot
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
