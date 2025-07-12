@@ -121,46 +121,85 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 async def addacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) < 2: return
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Bạn không có quyền sử dụng lệnh này.")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("⚠️ Dùng đúng cú pháp: /addacc <user> <pass>")
+        return
     accs = load_json("data/acc.json")
     accs.append({"user": context.args[0], "pass": context.args[1]})
     save_json("data/acc.json", accs)
     await update.message.reply_text("✅ Đã thêm acc.")
 
 async def delacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 1: return
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Bạn không có quyền sử dụng lệnh này.")
+        return
+    if len(context.args) != 1:
+        await update.message.reply_text("⚠️ Dùng đúng cú pháp: /delacc <id>")
+        return
     accs = load_json("data/acc.json")
-    idx = int(context.args[0])
-    if 0 <= idx < len(accs):
-        accs.pop(idx)
-        save_json("data/acc.json", accs)
-        await update.message.reply_text("✅ Đã xoá acc.")
-    else:
-        await update.message.reply_text("❌ ID không hợp lệ.")
+    try:
+        idx = int(context.args[0])
+        if 0 <= idx < len(accs):
+            accs.pop(idx)
+            save_json("data/acc.json", accs)
+            await update.message.reply_text("✅ Đã xoá acc.")
+        else:
+            await update.message.reply_text("❌ ID không hợp lệ.")
+    except ValueError:
+        await update.message.reply_text("❌ ID phải là số.")
 
 async def cong(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 2: return
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Bạn không có quyền sử dụng lệnh này.")
+        return
+    if len(context.args) != 2:
+        await update.message.reply_text("⚠️ Dùng đúng cú pháp: /cong <uid> <sotien>")
+        return
     uid, tien = context.args
     users = load_json("data/user.json")
-    users[uid] = users.get(uid, 0) + int(tien)
-    save_json("data/user.json", users)
-    await update.message.reply_text("✅ Đã cộng tiền.")
+    try:
+        tien = int(tien)
+        users[uid] = users.get(uid, 0) + tien
+        save_json("data/user.json", users)
+        await update.message.reply_text("✅ Đã cộng tiền.")
+    except ValueError:
+        await update.message.reply_text("❌ Số tiền không hợp lệ.")
 
 async def tru(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 2: return
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Bạn không có quyền sử dụng lệnh này.")
+        return
+    if len(context.args) != 2:
+        await update.message.reply_text("⚠️ Dùng đúng cú pháp: /tru <uid> <sotien>")
+        return
     uid, tien = context.args
     users = load_json("data/user.json")
-    users[uid] = max(0, users.get(uid, 0) - int(tien))
-    save_json("data/user.json", users)
-    await update.message.reply_text("✅ Đã trừ tiền.")
+    try:
+        tien = int(tien)
+        users[uid] = max(0, users.get(uid, 0) - tien)
+        save_json("data/user.json", users)
+        await update.message.reply_text("✅ Đã trừ tiền.")
+    except ValueError:
+        await update.message.reply_text("❌ Số tiền không hợp lệ.")
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Bạn không có quyền sử dụng lệnh này.")
+        return
     accs = load_json("data/acc.json")
     log = load_json("data/log.json")
     await update.message.reply_text(f"📊 Còn {len(accs)} acc\n🧾 Đã bán: {len(log)}")
 
 async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 1: return
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("❌ Bạn không có quyền sử dụng lệnh này.")
+        return
+    if len(context.args) != 1:
+        await update.message.reply_text("⚠️ Dùng đúng cú pháp: /addadmin <uid>")
+        return
     uid = context.args[0]
     admins = load_json("data/admins.json")
     admins[uid] = True
@@ -184,3 +223,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     print("🤖 Bot đang chạy...")
     app.run_polling()
+    
