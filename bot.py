@@ -1,35 +1,28 @@
 import os
 import json
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram import Update
+from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters)
 from dotenv import load_dotenv
 from keep_alive import keep_alive
 
-# Load .env cấu hình
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-# Giữ bot sống trên hosting
 keep_alive()
-
-# Tạo thư mục và file cần thiết
 os.makedirs("data", exist_ok=True)
-os.makedirs("data/cache_img", exist_ok=True)
-for f in ["acc.json", "user.json", "log.json", "duyet_log.json", "admins.json"]:
-    path = f"data/{f}"
-    if not os.path.exists(path):
-        with open(path, "w") as fp:
-            json.dump({} if "user" in f or "admins" in f else [], fp)
+for file in ["acc.json", "user.json", "log.json", "duyet_log.json", "admins.json"]:
+    if not os.path.exists(f"data/{file}"):
+        with open(f"data/{file}", "w") as f:
+            json.dump({} if "user" in file or "admins" in file else [], f)
 
-# Hàm tiện ích
 load_json = lambda path: json.load(open(path))
 save_json = lambda path, data: json.dump(data, open(path, "w"), indent=2)
+
 def is_admin(uid):
     return uid == ADMIN_ID or str(uid) in load_json("data/admins.json")
 
-# Lệnh bắt đầu
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎮 Chào mừng đến với shop acc Liên Quân!\n\n"
@@ -37,7 +30,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛠 Quản trị:\n/addacc <user> <pass>\n/delacc <id>\n/cong <uid> <sotien>\n/tru <uid> <sotien>\n/stats\n/addadmin <uid>"
     )
 
-# Các lệnh người dùng
 async def sodu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     users = load_json("data/user.json")
@@ -57,6 +49,7 @@ async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
+    user = update.effective_user
     caption = update.message.caption
 
     if not caption or not caption.isdigit():
@@ -74,6 +67,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json("data/duyet_log.json", logs)
 
     await update.message.reply_text(f"✅ Đã tự động cộng {sotien:,}đ vào tài khoản bạn!")
+
+    photo = update.message.photo[-1].file_id
+    text = (
+        f"📥 Giao dịch mới auto duyệt:\n"
+        f"👤 @{user.username or 'Không rõ'} | UID: `{uid}`\n"
+        f"💰 Số tiền: {sotien:,}đ\n"
+        f"🕒 {datetime.now().strftime('%H:%M:%S %d-%m-%Y')}"
+    )
+    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo, caption=text, parse_mode="Markdown")
 
 async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -118,7 +120,6 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"{i+1}. UID {uid} - {bal:,}đ\n"
     await update.message.reply_text(msg)
 
-# Quản trị cơ bản (bạn có thể thêm logic bảo vệ nếu muốn)
 async def addacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2: return
     accs = load_json("data/acc.json")
@@ -156,7 +157,7 @@ async def tru(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     accs = load_json("data/acc.json")
     log = load_json("data/log.json")
-    await update.message.reply_text(f"📊 Còn {len(accs)} acc trong kho\n🧾 Tổng acc đã bán: {len(log)}")
+    await update.message.reply_text(f"📊 Còn {len(accs)} acc\n🧾 Đã bán: {len(log)}")
 
 async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1: return
@@ -166,7 +167,6 @@ async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json("data/admins.json", admins)
     await update.message.reply_text("✅ Đã thêm admin phụ.")
 
-# Khởi động bot
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -184,4 +184,3 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     print("🤖 Bot đang chạy...")
     app.run_polling()
-              
