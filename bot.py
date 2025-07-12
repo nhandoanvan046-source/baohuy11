@@ -1,4 +1,4 @@
-""
+"
 import json
 import os
 import random
@@ -7,7 +7,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 from keep_alive import keep_alive
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN"
-ADMIN_ID = int(os.getenv("ADMIN_ID") or 5736655322)
+ADMIN_ID = int(os.getenv("ADMIN_ID") or 123456789)
 
 def load_json(file):
     try:
@@ -174,10 +174,8 @@ async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if balance < price:
         await update.message.reply_text(
-            f"❌ Bạn không đủ tiền!
-"
-            f"💸 Giá mỗi acc: {price_str} VND
-"
+            f"❌ Bạn không đủ tiền!\n"
+            f"💸 Giá mỗi acc: {price_str} VND\n"
             f"💰 Số dư hiện tại: {balance_str} VND"
         )
         return
@@ -192,35 +190,21 @@ async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_balance_str = f"{balances[user_id]:,}".replace(",", ".")
 
     await update.message.reply_text(
-        f"🎁 Bạn đã mua acc với giá {price_str} VND:
-"
-        f"🔑 Tài khoản: {acc['taikhoan']}
-"
-        f"🔐 Mật khẩu: {acc['matkhau']}
-"
+        f"🎁 Bạn đã mua acc với giá {price_str} VND:\n"
+        f"🔑 Tài khoản: {acc['taikhoan']}\n"
+        f"🔐 Mật khẩu: {acc['matkhau']}\n"
         f"💰 Số dư còn lại: {new_balance_str} VND"
     )
 
-    await update.message.reply_text(
-        f"🎁 Bạn đã mua acc với giá {price} VND:
-"
-        f"🔑 Tài khoản: {acc['taikhoan']}
-"
-        f"🔐 Mật khẩu: {acc['matkhau']}
-"
-        f"💰 Số dư còn lại: {balances[user_id]} VND"
-    )
-
-
-    keep_alive()
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('sodu', sodu))
-    app.add_handler(CommandHandler('nap', nap))
-    app.add_handler(CommandHandler('tru', tru))
-    app.add_handler(CommandHandler('addadmin', addadmin))
-    app.add_handler(CommandHandler('random', random))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(CallbackQueryHandler(duyet_tien_callback))
-    print("✅ Bot đang chạy...")
-    app.run_polling()
+keep_alive()
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+app.add_handler(CommandHandler('start', start))
+app.add_handler(CommandHandler('sodu', sodu))
+app.add_handler(CommandHandler('nap', nap))
+app.add_handler(CommandHandler('tru', tru))
+app.add_handler(CommandHandler('addadmin', addadmin))
+app.add_handler(CommandHandler('random', random))
+app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+app.add_handler(CallbackQueryHandler(duyet_tien_callback))
+print("✅ Bot đang chạy...")
+app.run_polling()
