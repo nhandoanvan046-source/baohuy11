@@ -76,7 +76,7 @@ async def random_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not acc_list:
         await update.message.reply_text("🚫 Hết tài khoản để bán!")
         return
-    price = 10000
+    price = 2000
     sodu = balances.get(user_id, 0)
     if sodu < price:
         await update.message.reply_text(f"❌ Bạn cần {price} VND để mua acc. Hiện tại bạn có {sodu} VND.")
