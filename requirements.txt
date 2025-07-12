@@ -1,13 +1,5 @@
-pyTelegramBotAPI 
-Flask
 python-telegram-bot
-requests
-pyrogram
-tgcrypto
-requests
-dotenv
-telethon
-pytz
-openai
-Pillow
+python-dotenv
+Flask
 pytesseract
+Pillow
