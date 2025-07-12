@@ -11,9 +11,9 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 admin_id_env = os.getenv("ADMIN_ID")
 if not BOT_TOKEN:
-    raise Exception("BOT_TOKEN chưa được cấu hình trong file .env!")
+    raise Exception("BOT_TOKEN chưa được cấu hình trong file .env!")
 if not admin_id_env:
-    raise Exception("ADMIN_ID chưa được cấu hình trong file .env!")
+    raise Exception("ADMIN_ID chưa được cấu hình trong file .env!")
 ADMIN_ID = int(admin_id_env)
 
 # === HÀM HỖ TRỢ ===
