@@ -56,20 +56,32 @@ async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
-    caption = update.message.caption or "Không rõ"
+    caption = update.message.caption
+
+    if not caption or not caption.isdigit():
+        await update.message.reply_text("⚠️ Vui lòng gửi ảnh với caption là số tiền (VD: 2000).")
+        return
+
+    sotien = caption
     file_id = update.message.photo[-1].file_id
     file = await context.bot.get_file(file_id)
     await file.download_to_drive(f"data/cache_img/{uid}.jpg")
 
+    username = f"@{update.effective_user.username}" if update.effective_user.username else "(không có username)"
+
     markup = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ Duyệt", callback_data=f"duyet:{uid}:{caption}"),
+            InlineKeyboardButton("✅ Duyệt", callback_data=f"duyet:{uid}:{sotien}"),
             InlineKeyboardButton("❌ Từ chối", callback_data=f"huy:{uid}")
         ]
     ])
-    await context.bot.send_photo(chat_id=ADMIN_ID, photo=file_id,
-        caption=f"🧾 Yêu cầu nạp tiền từ {uid} - {caption}", reply_markup=markup)
-    await update.message.reply_text("✅ Đã gửi yêu cầu. Vui lòng chờ duyệt.")
+    await context.bot.send_photo(
+        chat_id=ADMIN_ID,
+        photo=file_id,
+        caption=f"🧾 Yêu cầu nạp tiền từ {uid} ({username}) - {sotien}",
+        reply_markup=markup
+    )
+    await update.message.reply_text("✅ Đã gửi yêu cầu. Vui lòng chờ admin duyệt.")
 
 async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
