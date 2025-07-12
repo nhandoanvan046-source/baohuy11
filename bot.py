@@ -302,13 +302,13 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === KHỞI CHẠY BOT ===
 if __name__ == '__main__':
-    keep_alive()
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('sodu', sodu))
-    app.add_handler(CommandHandler('myacc', myacc))
-    app.add_handler(CommandHandler('random', random_acc))
-    app.add_handler(CommandHandler('nap', nap))
+    keep_alive()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('sodu', sodu))
+    app.add_handler(CommandHandler('myacc', myacc))
+    app.add_handler(CommandHandler('random', random_acc))
+    app.add_handler(CommandHandler('nap', nap))
     app.add_handler(CommandHandler('addadmin', addadmin))
     app.add_handler(CommandHandler('addacc', addacc))
     app.add_handler(CommandHandler('delacc', delacc))
