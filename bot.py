@@ -76,7 +76,7 @@ async def random_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚫 Hết tài khoản để bán!")
         return
 
-    price = 10000
+    price = 2000
     sodu = balances.get(user_id, 0)
 
     if sodu < price:
@@ -96,7 +96,7 @@ async def random_acc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json("accounts.json", acc_list)
     save_json("history.json", history)
 
-    await update.message.reply_text(f"🎉 Bạn đã mua thành công 1 tài khoản:\n\n🆔 {acc_data}")
+    await update.message.reply_text(f"🎉 Bạn đã mua thành công 1 tài khoản:\n\n🆔 {acc_data}\n\n💰 Số dư còn lại: {balances[user_id]} VND")
 
 async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
@@ -256,6 +256,32 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(msg)
 
+async def cong(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.message.from_user.id):
+        await update.message.reply_text("❌ Bạn không có quyền sử dụng lệnh này!")
+        return
+
+    if len(context.args) < 2:
+        await update.message.reply_text("Cú pháp: /cong <user_id> <sotien>")
+        return
+
+    try:
+        user_id = str(context.args[0])
+        sotien = int(context.args[1])
+    except:
+        await update.message.reply_text("❌ Định dạng không hợp lệ. Hãy nhập đúng user_id và số tiền.")
+        return
+
+    balances = load_json("balances.json")
+    balances[user_id] = balances.get(user_id, 0) + sotien
+    save_json("balances.json", balances)
+
+    await update.message.reply_text(f"✅ Đã cộng {sotien} VND cho {user_id}.")
+    try:
+        await context.bot.send_message(chat_id=int(user_id), text=f"💰 Bạn đã được cộng {sotien} VND vào tài khoản bởi admin.")
+    except:
+        pass
+
 # === KHỞI CHẠY BOT ===
 if __name__ == '__main__':
     keep_alive()
@@ -270,6 +296,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('addacc', addacc))
     app.add_handler(CommandHandler('delacc', delacc))
     app.add_handler(CommandHandler('stats', stats))
+    app.add_handler(CommandHandler('cong', cong))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(callback_duyet))
 
