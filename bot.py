@@ -28,7 +28,7 @@ save_json = lambda path, data: json.dump(data, open(path, "w"), indent=2)
 def is_admin(uid):
     return uid == ADMIN_ID or str(uid) in load_json("data/admins.json")
 
-# /start
+# Giao diện chính
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎮 Chào mừng đến với shop acc Liên Quân!\n\n"
@@ -36,7 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛠 Quản trị:\n/addacc <user> <pass>\n/delacc <id>\n/cong <uid> <sotien>\n/tru <uid> <sotien>\n/stats\n/addadmin <uid>"
     )
 
-# Người dùng
+# Các lệnh người dùng
 async def sodu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     users = load_json("data/user.json")
@@ -59,8 +59,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = update.message.caption
 
     if not caption or not caption.isdigit():
-        await update.message.reply_text("⚠️ Vui lòng gửi ảnh với caption là số tiền (VD: 2000).")
-        return
+    await update.message.delete()
+    return
 
     sotien = caption
     file_id = update.message.photo[-1].file_id
@@ -78,7 +78,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=file_id,
-        caption=f"🧾 Yêu cầu nạp tiền từ {uid} ({username}) - {sotien}",
+        caption=None,
         reply_markup=markup
     )
     await update.message.reply_text("✅ Đã gửi yêu cầu. Vui lòng chờ admin duyệt.")
@@ -126,7 +126,7 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"{i+1}. UID {uid} - {bal:,}đ\n"
     await update.message.reply_text(msg)
 
-# Quản trị
+# Admin
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -134,9 +134,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if data.startswith("duyet"):
             _, uid, sotien = data.split(":")
+
             if not sotien.isdigit():
                 await query.edit_message_caption("❌ Không thể duyệt: số tiền không hợp lệ.")
                 return
+
             users = load_json("data/user.json")
             logs = load_json("data/duyet_log.json")
             users[uid] = users.get(uid, 0) + int(sotien)
@@ -149,6 +151,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove(f"data/cache_img/{uid}.jpg")
             except FileNotFoundError:
                 pass
+
         elif data.startswith("huy"):
             _, uid = data.split(":")
             await context.bot.send_message(chat_id=int(uid), text="❌ Yêu cầu nạp bị từ chối.")
