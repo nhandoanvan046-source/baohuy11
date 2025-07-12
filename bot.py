@@ -184,3 +184,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     print("🤖 Bot đang chạy...")
     app.run_polling()
+              
