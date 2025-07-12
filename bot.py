@@ -59,9 +59,27 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if not user or not chat:
         return
-    print(f"User {user.id} gọi lệnh /start")
     txt = (
         "🎮 *SHOP ACC LIÊN QUÂN*\n\n"
+        "🔄 /random - Mua acc ngẫu nhiên\n"
+        "📦 /myacc - Xem acc đã mua\n"
+        "💰 /sodu - Kiểm tra số dư\n"
+        "💳 /nap <sotien> - Nạp tiền\n"
+        "📊 /stats - Thống kê shop\n"
+        "🏆 /top - Top 10 người có số dư cao nhất\n"
+        "⚙️ /addadmin <user_id> - Thêm admin (chỉ admin chính)\n"
+        "➕ /addacc - Thêm nhiều acc (dùng theo mẫu bên dưới)\n\n"
+        "Ví dụ:\n/addacc taikhoan1 matkhau1\ntaikhoan2 matkhau2\n"
+    )
+    await ctx.bot.send_message(chat_id=chat.id, text=txt, parse_mode="Markdown")
+
+async def help_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat = update.effective_chat
+    if not user or not chat:
+        return
+    txt = (
+        "🎮 *SHOP ACC LIÊN QUÂN - HƯỚNG DẪN SỬ DỤNG*\n\n"
         "🔄 /random - Mua acc ngẫu nhiên\n"
         "📦 /myacc - Xem acc đã mua\n"
         "💰 /sodu - Kiểm tra số dư\n"
@@ -139,7 +157,7 @@ async def random_acc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not available:
         return await update.message.reply_text("❌ Hết acc để random!")
 
-    price = 2000
+    price = 1000
     bal = balances.get(user_id, 0)
     if bal < price:
         return await update.message.reply_text(f"❌ Bạn không đủ {price:,} VND để mua acc.")
@@ -173,9 +191,7 @@ async def myacc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-# ================================
-# ====== LỆNH CHO ADMIN ==========
-# ================================
+# =========== ADMIN ===========
 
 async def cong(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
@@ -255,9 +271,7 @@ async def addacc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     save_json(FILE_ACCOUNTS, accounts)
     await update.message.reply_text(f"✅ Đã thêm {added} acc mới.\n⚠️ Bỏ qua {skipped} acc đã tồn tại.")
 
-# ==================================
-# ======= CALLBACK NẠP TIỀN ========
-# ==================================
+# ========= CALLBACK =========
 
 async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -282,9 +296,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ctx.bot.send_message(chat_id=int(user_id), text=msg_to_user)
         await query.edit_message_text(msg_to_admin)
 
-# ============================
-# ====== THỐNG KÊ TOP =========
-# ============================
+# ========= STATS =========
 
 async def top(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     balances = load_json(FILE_BALANCES)
@@ -312,15 +324,14 @@ async def stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-# ============================
-# ========= MAIN =============
-# ============================
+# ========== MAIN ==========
 
 if __name__ == "__main__":
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("sodu", sodu))
     app.add_handler(CommandHandler("nap", nap))
     app.add_handler(CommandHandler("random", random_acc))
@@ -332,7 +343,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("addadmin", addadmin))
     app.add_handler(CommandHandler("addacc", addacc))
 
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.PHOTO & ~filters.COMMAND, handle_photo))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
     print("🤖 Bot đang chạy...")
