@@ -28,7 +28,7 @@ save_json = lambda path, data: json.dump(data, open(path, "w"), indent=2)
 def is_admin(uid):
     return uid == ADMIN_ID or str(uid) in load_json("data/admins.json")
 
-# Giao diện chính
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎮 Chào mừng đến với shop acc Liên Quân!\n\n"
@@ -36,7 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛠 Quản trị:\n/addacc <user> <pass>\n/delacc <id>\n/cong <uid> <sotien>\n/tru <uid> <sotien>\n/stats\n/addadmin <uid>"
     )
 
-# Các lệnh người dùng
+# Người dùng
 async def sodu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     users = load_json("data/user.json")
@@ -126,7 +126,7 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"{i+1}. UID {uid} - {bal:,}đ\n"
     await update.message.reply_text(msg)
 
-# Admin
+# Quản trị
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -134,11 +134,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if data.startswith("duyet"):
             _, uid, sotien = data.split(":")
-
             if not sotien.isdigit():
                 await query.edit_message_caption("❌ Không thể duyệt: số tiền không hợp lệ.")
                 return
-
             users = load_json("data/user.json")
             logs = load_json("data/duyet_log.json")
             users[uid] = users.get(uid, 0) + int(sotien)
@@ -146,12 +144,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_json("data/user.json", users)
             save_json("data/duyet_log.json", logs)
             await context.bot.send_message(chat_id=int(uid), text=f"✅ Admin đã duyệt nạp {sotien}đ!")
-            await query.edit_message_caption(f"✅ Đã duyệt nạp {sotien}đ cho UID {uid}")
+            await query.edit_message_caption(None)
             try:
                 os.remove(f"data/cache_img/{uid}.jpg")
             except FileNotFoundError:
                 pass
-
         elif data.startswith("huy"):
             _, uid = data.split(":")
             await context.bot.send_message(chat_id=int(uid), text="❌ Yêu cầu nạp bị từ chối.")
@@ -244,3 +241,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(handle_callback))
     print("🤖 Bot đang chạy...")
     app.run_polling()
+    
