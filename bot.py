@@ -133,10 +133,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     try:
         if data.startswith("duyet"):
-            _, uid, sotien = data.split(":")
-            users = load_json("data/user.json")
-            logs = load_json("data/duyet_log.json")
-            users[uid] = users.get(uid, 0) + int(sotien)
+    _, uid, sotien = data.split(":")
+
+    if not sotien.isdigit():
+        await query.edit_message_caption("❌ Không thể duyệt: số tiền không hợp lệ.")
+        return
+
+    users = load_json("data/user.json")
+    logs = load_json("data/duyet_log.json")
+    users[uid] = users.get(uid, 0) + int(sotien)
+    logs.append({"uid": uid, "status": "Duyệt", "amount": int(sotien)})
+    save_json("data/user.json", users)
+    save_json("data/duyet_log.json", logs)
+    await context.bot.send_message(chat_id=int(uid), text=f"✅ Admin đã duyệt nạp {sotien}đ!")
+    await query.edit_message_caption(f"✅ Đã duyệt nạp {sotien}đ cho UID {uid}")
+    try:
+        os.remove(f"data/cache_img/{uid}.jpg")
+    except FileNotFoundError:
+        pass
             logs.append({"uid": uid, "status": "Duyệt", "amount": int(sotien)})
             save_json("data/user.json", users)
             save_json("data/duyet_log.json", logs)
