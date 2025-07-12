@@ -1,20 +1,14 @@
+""
 import json
 import os
 import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from keep_alive import keep_alive
-from dotenv import load_dotenv
 
-load_dotenv()
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN"
+ADMIN_ID = int(os.getenv("ADMIN_ID") or 5736655322)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-admin_id_env = os.getenv("ADMIN_ID")
-if admin_id_env is None:
-    raise Exception("ADMIN_ID chưa được cấu hình trong file .env!")
-ADMIN_ID = int(admin_id_env)
-
-# Load và lưu dữ liệu
 def load_json(file):
     try:
         with open(file, 'r') as f:
@@ -27,33 +21,8 @@ def save_json(file, data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 def is_admin(user_id):
-    admin_list = load_json("admins.json")
-    return str(user_id) in admin_list
-
-# /addadmin <user_id>
-async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Chỉ super admin mới có quyền thêm admin.")
-        return
-
-    if len(context.args) < 1:
-        await update.message.reply_text("Cú pháp: /addadmin <user_id>")
-        return
-
-    user_id = context.args[0]
     admins = load_json("admins.json")
-    if user_id in admins:
-        await update.message.reply_text("User này đã là admin.")
-        return
-
-    admins[user_id] = True
-    save_json("admins.json", admins)
-    await update.message.reply_text(f"✅ Đã thêm admin: {user_id}")
-
-    try:
-        await context.bot.send_message(chat_id=int(user_id), text="🎉 Bạn đã được thêm làm admin!")
-    except:
-        pass
+    return str(user_id) in admins or user_id == ADMIN_ID
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -62,20 +31,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/myacc - Xem acc đã mua\n"
         "/sodu - Xem số dư\n"
         "/nap <sotien> - Yêu cầu nạp tiền\n\n"
-        "Quản lý (Admin):\n"
+        "🔐 Admin:\n"
         "/addacc <taikhoan> <matkhau> - Thêm acc\n"
         "/delacc <id> - Xóa acc\n"
         "/stats - Xem thống kê\n"
-        "/cong <user_id> <sotien> - Cộng tiền cho người dùng\n"
-        "/tru <user_id> <sotien> - Trừ tiền người dùng\n"
-        "/addadmin <user_id> - Thêm admin mới"
+        "/cong <user_id> <sotien> - Cộng tiền\n"
+        "/tru <user_id> <sotien> - Trừ tiền\n"
+        "/addadmin <user_id> - Thêm admin"
     )
 
 async def sodu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balances = load_json('balances.json')
     user_id = str(update.message.from_user.id)
     balance = balances.get(user_id, 0)
-    await update.message.reply_text(f"💰 Số dư hiện tại: {balance} VND")
+    await update.message.reply_text(f"💰 Số dư: {balance} VND")
 
 async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
@@ -84,19 +53,14 @@ async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         sotien = int(context.args[0])
     except:
-        await update.message.reply_text("Số tiền phải là số!")
+        await update.message.reply_text("Số tiền không hợp lệ!")
         return
     user_id = str(update.message.from_user.id)
     pending = load_json('pending.json')
     pending[user_id] = sotien
     save_json('pending.json', pending)
     await update.message.reply_text(
-        f"Vui lòng chuyển khoản:\n\n"
-        "📲 STK: 0971487462\n"
-        "🏦 Ngân hàng: MB Bank\n"
-        f"🖬 Nội dung: {user_id}\n"
-        f"💰 Số tiền: {sotien} VND\n\n"
-        "Gửi ảnh chuyển khoản vào đây cho admin duyệt."
+        f"📲 STK: 0971487462\n🏦 MB Bank\n🖋 Nội dung: {user_id}\n💰 Số tiền: {sotien} VND\nGửi ảnh chuyển khoản để admin duyệt."
     )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -104,7 +68,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.message.from_user.username or "Không có username"
     pending = load_json('pending.json')
     if user_id not in pending:
-        await update.message.reply_text("Bạn chưa yêu cầu nạp tiền! /nap <sotien> trước.")
+        await update.message.reply_text("Bạn chưa dùng lệnh /nap")
         return
     sotien = pending[user_id]
     buttons = [[
@@ -113,12 +77,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]]
     markup = InlineKeyboardMarkup(buttons)
     await context.bot.forward_message(chat_id=ADMIN_ID, from_chat_id=update.message.chat_id, message_id=update.message.message_id)
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=f"💰 Yêu cầu nạp: {sotien} VND\n👤 ID: {user_id}\n👑 @{username}",
-        reply_markup=markup
-    )
-    await update.message.reply_text("Đã gửi ảnh cho admin, vui lòng chờ duyệt!")
+    await context.bot.send_message(chat_id=ADMIN_ID, text=f"💰 Yêu cầu nạp: {sotien} VND\n👤 ID: {user_id}\n👑 @{username}", reply_markup=markup)
+    await update.message.reply_text("⏳ Đã gửi ảnh cho admin, vui lòng chờ duyệt!")
 
 async def duyet_tien_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -137,71 +97,130 @@ async def duyet_tien_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if user_id in pending:
             del pending[user_id]
             save_json('pending.json', pending)
-        await query.edit_message_text(f"✅ Đã duyệt nạp {sotien} VND cho user {user_id}")
-        try:
-            await context.bot.send_message(chat_id=int(user_id), text=f"🎉 Bạn đã được duyệt {sotien} VND!")
-        except: pass
+        await query.edit_message_text(f"✅ Đã duyệt nạp {sotien} VND cho {user_id}")
+        await context.bot.send_message(
+            chat_id=int(user_id), 
+            text=(
+                f"🎉 Nạp tiền thành công!\n"
+                f"+ {sotien} VND đã được cộng vào tài khoản.\n"
+                f"💰 Kiểm tra số dư bằng lệnh /sodu."
+            )
+        )
     elif data.startswith("tu_choi_"):
         _, user_id = data.split("_")
         pending = load_json('pending.json')
         if user_id in pending:
             del pending[user_id]
             save_json('pending.json', pending)
-        await query.edit_message_text(f"❌ Đã từ chối yêu cầu nạp tiền của user {user_id}")
-        try:
-            await context.bot.send_message(chat_id=int(user_id), text="❌ Yêu cầu nạp bị từ chối.")
-        except: pass
+        await query.edit_message_text(f"❌ Đã từ chối yêu cầu nạp của {user_id}")
+        await context.bot.send_message(chat_id=int(user_id), text="❌ Yêu cầu nạp bị từ chối.")
 
-# Lệnh /tru để trừ tiền người dùng
+async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Chỉ super admin được thêm admin!")
+        return
+    if len(context.args) < 1:
+        await update.message.reply_text("Cú pháp: /addadmin <user_id>")
+        return
+    user_id = context.args[0]
+    admins = load_json("admins.json")
+    if user_id in admins:
+        await update.message.reply_text("User đã là admin!")
+    else:
+        admins[user_id] = True
+        save_json("admins.json", admins)
+        await update.message.reply_text(f"✅ Đã thêm admin {user_id}")
+        await context.bot.send_message(chat_id=int(user_id), text="🎉 Bạn đã được cấp quyền admin!")
+
 async def tru(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
-        await update.message.reply_text("Bạn không có quyền sử dụng lệnh này!")
+        await update.message.reply_text("❌ Không có quyền!")
         return
-
     if len(context.args) < 2:
         await update.message.reply_text("Cú pháp: /tru <user_id> <sotien>")
         return
-
+    user_id = str(context.args[0])
     try:
-        user_id = str(context.args[0])
         sotien = int(context.args[1])
     except:
-        await update.message.reply_text("Sai định dạng, vui lòng kiểm tra lại!")
+        await update.message.reply_text("Số tiền không hợp lệ")
         return
-
     balances = load_json('balances.json')
-    if user_id not in balances or balances[user_id] < sotien:
-        await update.message.reply_text("❌ Không đủ tiền hoặc user không tồn tại.")
+    if balances.get(user_id, 0) < sotien:
+        await update.message.reply_text("❌ Không đủ tiền!")
         return
-
     balances[user_id] -= sotien
     save_json('balances.json', balances)
+    accs = load_json('acc.json')
+    owned = [f"{a['taikhoan']} / {a['matkhau']}" for a in accs if a.get('owner_id') == int(user_id)]
+    info = "\n📦 Acc đã mua:\n" + "\n".join(owned) if owned else ""
+    await update.message.reply_text(f"✅ Đã trừ {sotien} VND từ {user_id}")
+    await context.bot.send_message(chat_id=int(user_id), text=f"⚠️ Bạn đã bị trừ {sotien} VND bởi admin.{info}")
 
-    # Kiểm tra nếu user đã mua acc nào
+async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    balances = load_json('balances.json')
     accounts = load_json('acc.json')
-    bought = [acc for acc in accounts if acc.get('owner_id') == int(user_id)]
-    acc_info = "\n\n📦 Acc đã mua:\n" + "\n".join(f"{acc['taikhoan']} / {acc['matkhau']}" for acc in bought) if bought else ""
 
-    await update.message.reply_text(f"✅ Đã trừ {sotien} VND của user {user_id}.")
-    try:
-        await context.bot.send_message(
-            chat_id=int(user_id), 
-            text=f"⚠️ Tài khoản bạn đã bị trừ {sotien} VND bởi admin.{acc_info}"
+    balance = balances.get(user_id, 0)
+    price = 2000
+    price_str = f"{price:,}".replace(",", ".")
+    balance_str = f"{balance:,}".replace(",", ".")
+    available = [a for a in accounts if a['trangthai'] == 'chua_ban']
+
+    if not available:
+        await update.message.reply_text("🚫 Hiện không còn acc nào để bán.")
+        return
+
+    if balance < price:
+        await update.message.reply_text(
+            f"❌ Bạn không đủ tiền!
+"
+            f"💸 Giá mỗi acc: {price_str} VND
+"
+            f"💰 Số dư hiện tại: {balance_str} VND"
         )
-    except:
-        pass
+        return
 
-if __name__ == '__main__':
+    acc = random.choice(available)
+    balances[user_id] = balance - price
+    acc['trangthai'] = 'da_ban'
+    acc['owner_id'] = int(user_id)
+    save_json('balances.json', balances)
+    save_json('acc.json', accounts)
+
+    new_balance_str = f"{balances[user_id]:,}".replace(",", ".")
+
+    await update.message.reply_text(
+        f"🎁 Bạn đã mua acc với giá {price_str} VND:
+"
+        f"🔑 Tài khoản: {acc['taikhoan']}
+"
+        f"🔐 Mật khẩu: {acc['matkhau']}
+"
+        f"💰 Số dư còn lại: {new_balance_str} VND"
+    )
+
+    await update.message.reply_text(
+        f"🎁 Bạn đã mua acc với giá {price} VND:
+"
+        f"🔑 Tài khoản: {acc['taikhoan']}
+"
+        f"🔐 Mật khẩu: {acc['matkhau']}
+"
+        f"💰 Số dư còn lại: {balances[user_id]} VND"
+    )
+
+
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('sodu', sodu))
     app.add_handler(CommandHandler('nap', nap))
     app.add_handler(CommandHandler('tru', tru))
     app.add_handler(CommandHandler('addadmin', addadmin))
+    app.add_handler(CommandHandler('random', random))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(duyet_tien_callback))
-
-    print("Bot đang chạy...")
+    print("✅ Bot đang chạy...")
     app.run_polling()
