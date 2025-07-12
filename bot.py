@@ -32,19 +32,34 @@ def is_admin(user_id):
 # ========= LỆNH NGƯỜI DÙNG =========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🎮 Chào mừng đến với shop acc Liên Quân!\n\n"
-        "🛒 Người dùng:\n"
-        "/random - Mua acc random\n"
-        "/myacc - Acc đã mua\n"
-        "/sodu - Kiểm tra số dư\n"
-        "/nap <sotien> - Nạp tiền\n"
-        "/top - TOP người giàu\n\n"
-        "🛠 Quản trị:\n"
-        "/addacc <user> <pass>\n"
-        "/delacc <id>\n"
-        "/cong <uid> <sotien>\n"
-        "/tru <uid> <sotien>\n"
-        "/stats - Thống kê\n"
+        "🎮 Chào mừng đến với shop acc Liên Quân!
+
+"
+        "🛒 Người dùng:
+"
+        "/random - Mua acc random
+"
+        "/myacc - Acc đã mua
+"
+        "/sodu - Kiểm tra số dư
+"
+        "/nap <sotien> - Nạp tiền
+"
+        "/top - TOP người giàu
+
+"
+        "🛠 Quản trị:
+"
+        "/addacc <user> <pass>
+"
+        "/delacc <id>
+"
+        "/cong <uid> <sotien>
+"
+        "/tru <uid> <sotien>
+"
+        "/stats - Thống kê
+"
         "/addadmin <uid>"
     )
 
@@ -99,7 +114,13 @@ async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pending[uid] = sotien
     save_json("pending.json", pending)
     await update.message.reply_text(
-        f"💳 Chuyển khoản:\nMB Bank - 0971487462\nNội dung: {uid}\nSố tiền: {sotien} VND\nSau đó gửi ảnh xác nhận tại đây.")
+        f"💳 Vui lòng chuyển khoản theo thông tin sau:\n\n"
+        f"- 📲 STK: 0971487462\n"
+        f"- 🏦 Ngân hàng: MB Bank\n"
+        f"- 💬 Nội dung: {uid}\n"
+        f"- 💰 Số tiền: {sotien:,} VND\n\n"
+        f"📸 Sau đó gửi ảnh chuyển khoản vào bot để admin duyệt."
+    )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.message.from_user.id)
@@ -113,14 +134,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❌ Ảnh quá nhỏ hoặc mờ.")
 
     sotien = pending[uid]
+    caption = (
+        f"💰 Yêu cầu nạp: {sotien:,} VND\n"
+        f"👤 User ID: {uid}\n"
+        f"👑 Username: @{username}"
+    )
     markup = InlineKeyboardMarkup([[
         InlineKeyboardButton("✔ Duyệt", callback_data=f"duyet_{uid}_{sotien}"),
         InlineKeyboardButton("❌ Từ chối", callback_data=f"tuchoi_{uid}")
     ]])
     await context.bot.send_photo(
         ADMIN_ID, photo.file_id,
-        caption=f"💰 Yêu cầu nạp: {sotien} VND\n👤 @{username} ({uid})",
-        reply_markup=markup)
+        caption=caption,
+        reply_markup=markup
+    )
     await update.message.reply_text("✅ Đã gửi ảnh cho admin, vui lòng đợi duyệt!")
 
 # ========= ADMIN =========
@@ -190,7 +217,7 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = f"@{member.username}" if member.username else f"ID ****{uid[-4:]}"
         except:
             name = f"ID ****{uid[-4:]}"
-        msg += f"{i}. {name}: {vnd} VND\n"
+        msg += f"{i}. {name}: {vnd:,} VND\n"
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -217,8 +244,8 @@ async def callback_duyet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending = load_json("pending.json")
         pending.pop(uid, None)
         save_json("pending.json", pending)
-        await query.edit_message_text(f"✅ Duyệt nạp {sotien} VND cho {uid}")
-        await context.bot.send_message(int(uid), f"🎉 Bạn đã được cộng {sotien} VND!")
+        await query.edit_message_text(f"✅ Duyệt nạp {sotien:,} VND cho {uid}")
+        await context.bot.send_message(int(uid), f"🎉 Bạn đã được cộng {sotien:,} VND!")
     elif data.startswith("tuchoi_"):
         _, uid = data.split("_")
         pending = load_json("pending.json")
