@@ -9,3 +9,5 @@ dotenv
 telethon
 pytz
 openai
+PIL
+pytesseract
