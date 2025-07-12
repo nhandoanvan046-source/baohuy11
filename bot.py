@@ -1,13 +1,19 @@
-import json, os, random
+import json
+import os
+import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
 )
 from keep_alive import keep_alive
 from dotenv import load_dotenv
 
-# --- Load env ---
+# Load biến môi trường
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
@@ -17,24 +23,26 @@ if not BOT_TOKEN or not ADMIN_ID:
 
 ADMIN_ID = int(ADMIN_ID)
 
-# --- File paths ---
-FILE_BALANCES = 'balances.json'
-FILE_PENDING = 'pending.json'
-FILE_ACCOUNTS = 'acc.json'
-FILE_ADMINS = 'admins.json'
+# File JSON lưu dữ liệu
+FILE_BALANCES = "balances.json"
+FILE_PENDING = "pending.json"
+FILE_ACCOUNTS = "acc.json"
+FILE_ADMINS = "admins.json"
 
-# --- Helpers ---
+
 def load_json(filename, default=None):
     default = default or {}
     try:
-        with open(filename, 'r', encoding='utf-8') as f:
+        with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return default
 
+
 def save_json(filename, data):
-    with open(filename, 'w', encoding='utf-8') as f:
+    with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+
 
 def get_admins():
     admins = load_json(FILE_ADMINS, default=[])
@@ -43,15 +51,19 @@ def get_admins():
         save_json(FILE_ADMINS, admins)
     return admins
 
+
 def is_admin(user_id: int):
     return user_id in get_admins()
 
+
 # --- Commands ---
+
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    print(f"User {update.message.from_user.id} gọi lệnh /start")  # Debug
     txt = (
-        "🎮 *SHOP ACC LIÊN QUÂN Bảo Huy*\n\n"
-        "🔄👮 /random - Mua acc ngẫu nhiên\n"
-        "😛 /myacc - Xem acc đã mua\n"
+        "🎮 *SHOP ACC LIÊN QUÂN*\n\n"
+        "🔄 /random - Mua acc ngẫu nhiên\n"
+        "📦 /myacc - Xem acc đã mua\n"
         "💰 /sodu - Kiểm tra số dư\n"
         "💳 /nap <sotien> - Nạp tiền\n"
         "📊 /stats - Thống kê shop\n"
@@ -60,13 +72,15 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "➕ /addacc - Thêm nhiều acc (dùng theo mẫu bên dưới)\n\n"
         "Ví dụ:\n/addacc taikhoan1 matkhau1\ntaikhoan2 matkhau2\n"
     )
-    await update.message.reply_text(txt, parse_mode='Markdown')
+    await update.message.reply_text(txt, parse_mode="Markdown")
+
 
 async def sodu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     balances = load_json(FILE_BALANCES)
     user_id = str(update.message.from_user.id)
     bal = balances.get(user_id, 0)
     await update.message.reply_text(f"💰 Số dư của bạn: {bal:,} VND")
+
 
 async def nap(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not ctx.args or len(ctx.args) == 0:
@@ -92,7 +106,8 @@ async def nap(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"- 💰 *Số tiền:* `{amount:,} VND`\n\n"
         "Sau đó gửi ảnh chuyển khoản vào bot để admin duyệt."
     )
-    await update.message.reply_text(msg, parse_mode='Markdown')
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
 
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
@@ -103,28 +118,35 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❗ Bạn chưa yêu cầu nạp tiền bằng /nap!")
 
     amount = pending[user_id]
-    keyboard = InlineKeyboardMarkup([
+    keyboard = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton(f"✅ Duyệt {amount:,} VND", callback_data=f"duyet_{user_id}_{amount}"),
-            InlineKeyboardButton(f"❌ Từ chối {amount:,} VND", callback_data=f"tuchoi_{user_id}_{amount}")
+            [
+                InlineKeyboardButton(
+                    f"✅ Duyệt {amount:,} VND", callback_data=f"duyet_{user_id}_{amount}"
+                ),
+                InlineKeyboardButton(
+                    f"❌ Từ chối {amount:,} VND", callback_data=f"tuchoi_{user_id}_{amount}"
+                ),
+            ]
         ]
-    ])
+    )
 
     await ctx.bot.forward_message(ADMIN_ID, update.message.chat.id, update.message.message_id)
     await ctx.bot.send_message(
         ADMIN_ID,
         f"💰 *Yêu cầu nạp:* {amount:,} VND\n👤 *User ID:* {user_id}\n👑 *Username:* @{username}",
-        parse_mode='Markdown',
-        reply_markup=keyboard
+        parse_mode="Markdown",
+        reply_markup=keyboard,
     )
     await update.message.reply_text("✅ Đã gửi ảnh nạp tiền cho admin. Vui lòng chờ duyệt!")
+
 
 async def random_acc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     balances = load_json(FILE_BALANCES)
     accounts = load_json(FILE_ACCOUNTS)
     user_id = str(update.message.from_user.id)
 
-    available = [acc for acc in accounts if acc.get('trangthai') == 'chua_ban']
+    available = [acc for acc in accounts if acc.get("trangthai") == "chua_ban"]
     if not available:
         return await update.message.reply_text("❌ Hết acc để random!")
 
@@ -134,7 +156,7 @@ async def random_acc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(f"❌ Bạn không đủ {price:,} VND để mua acc.")
 
     acc = random.choice(available)
-    acc.update({'trangthai': 'da_ban', 'owner_id': user_id})
+    acc.update({"trangthai": "da_ban", "owner_id": user_id})
     save_json(FILE_ACCOUNTS, accounts)
 
     balances[user_id] = bal - price
@@ -145,13 +167,14 @@ async def random_acc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"👤 *Tài khoản:* `{acc['taikhoan']}`\n"
         f"🔑 *Mật khẩu:* `{acc['matkhau']}`\n"
         f"💰 *Số dư còn lại:* {balances[user_id]:,} VND",
-        parse_mode='Markdown'
+        parse_mode="Markdown",
     )
+
 
 async def myacc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     accounts = load_json(FILE_ACCOUNTS)
     user_id = str(update.message.from_user.id)
-    my_accs = [a for a in accounts if a.get('owner_id') == user_id]
+    my_accs = [a for a in accounts if a.get("owner_id") == user_id]
 
     if not my_accs:
         return await update.message.reply_text("📭 Bạn chưa mua acc nào.")
@@ -160,7 +183,8 @@ async def myacc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for i, acc in enumerate(my_accs, 1):
         msg += f"{i}. 👤 `{acc['taikhoan']}`\n🔑 `{acc['matkhau']}`\n\n"
 
-    await update.message.reply_text(msg, parse_mode='Markdown')
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
 
 async def cong(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
@@ -179,7 +203,10 @@ async def cong(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     balances = load_json(FILE_BALANCES)
     balances[uid] = balances.get(uid, 0) + amount
     save_json(FILE_BALANCES, balances)
-    await update.message.reply_text(f"✅ Đã cộng {amount:,} VND cho user `{uid}`", parse_mode='Markdown')
+    await update.message.reply_text(
+        f"✅ Đã cộng {amount:,} VND cho user `{uid}`", parse_mode="Markdown"
+    )
+
 
 async def trutien(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
@@ -197,13 +224,17 @@ async def trutien(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     balances = load_json(FILE_BALANCES)
     if balances.get(uid, 0) < amount:
-        return await update.message.reply_text(f"⚠️ User `{uid}` không đủ tiền!", parse_mode="Markdown")
+        return await update.message.reply_text(
+            f"⚠️ User `{uid}` không đủ tiền!", parse_mode="Markdown"
+        )
 
     balances[uid] -= amount
     save_json(FILE_BALANCES, balances)
-    await update.message.reply_text(f"✅ Đã trừ {amount:,} VND từ user `{uid}`", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"✅ Đã trừ {amount:,} VND từ user `{uid}`", parse_mode="Markdown"
+    )
 
-# --- Callback xử lý duyệt nạp ---
+
 async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -233,7 +264,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ctx.bot.send_message(chat_id=int(user_id), text=msg_to_user)
         await query.edit_message_text(msg_to_admin)
 
-# --- /top ---
+
 async def top(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     balances = load_json(FILE_BALANCES)
     if not balances:
@@ -244,16 +275,16 @@ async def top(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for i, (uid, bal) in enumerate(sorted_bal, 1):
         msg += f"{i}. User `{uid}` — {bal:,} VND\n"
 
-    await update.message.reply_text(msg, parse_mode='Markdown')
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
-# --- /stats ---
+
 async def stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     balances = load_json(FILE_BALANCES)
     accounts = load_json(FILE_ACCOUNTS)
 
     total_users = len(balances)
     total_acc = len(accounts)
-    unsold_acc = sum(1 for acc in accounts if acc.get('trangthai') == 'chua_ban')
+    unsold_acc = sum(1 for acc in accounts if acc.get("trangthai") == "chua_ban")
     total_balance = sum(balances.values())
 
     msg = (
@@ -263,9 +294,9 @@ async def stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"🆓 Acc chưa bán: {unsold_acc}\n"
         f"💰 Tổng số dư user: {total_balance:,} VND\n"
     )
-    await update.message.reply_text(msg, parse_mode='Markdown')
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
-# --- /addadmin ---
+
 async def addadmin(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != ADMIN_ID:
@@ -285,27 +316,29 @@ async def addadmin(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     admins.append(new_admin)
     save_json(FILE_ADMINS, admins)
-    await update.message.reply_text(f"✅ Đã thêm admin mới: `{new_admin}`", parse_mode='Markdown')
+    await update.message.reply_text(f"✅ Đã thêm admin mới: `{new_admin}`", parse_mode="Markdown")
 
-# --- /addacc ---
+
 async def addacc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.from_user.id):
         return await update.message.reply_text("❌ Bạn không phải admin.")
 
-    text = update.message.text.partition(' ')[2].strip()
+    text = update.message.text.partition(" ")[2].strip()
     if not text:
-        return await update.message.reply_text("📌 Cú pháp:\n/addacc taikhoan1 matkhau1\ntaikhoan2 matkhau2\n...")
+        return await update.message.reply_text(
+            "📌 Cú pháp:\n/addacc taikhoan1 matkhau1\ntaikhoan2 matkhau2\n..."
+        )
 
     accounts = load_json(FILE_ACCOUNTS)
     added = 0
     skipped = 0
 
-    for line in text.split('\n'):
+    for line in text.split("\n"):
         parts = line.strip().split()
         if len(parts) < 2:
             continue
         tk, mk = parts[0], parts[1]
-        if any(acc['taikhoan'] == tk for acc in accounts):
+        if any(acc["taikhoan"] == tk for acc in accounts):
             skipped += 1
             continue
         accounts.append({"taikhoan": tk, "matkhau": mk, "trangthai": "chua_ban"})
@@ -316,25 +349,24 @@ async def addacc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"✅ Đã thêm {added} acc mới.\n⚠️ Bỏ qua {skipped} acc đã tồn tại."
     )
 
-# --- Main ---
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Commands
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('sodu', sodu))
-    app.add_handler(CommandHandler('nap', nap))
-    app.add_handler(CommandHandler('random', random_acc))
-    app.add_handler(CommandHandler('myacc', myacc))
-    app.add_handler(CommandHandler('cong', cong))
-    app.add_handler(CommandHandler('trutien', trutien))
-    app.add_handler(CommandHandler('top', top))
-    app.add_handler(CommandHandler('stats', stats))
-    app.add_handler(CommandHandler('addadmin', addadmin))
-    app.add_handler(CommandHandler('addacc', addacc))
+    # Đăng ký handler
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("sodu", sodu))
+    app.add_handler(CommandHandler("nap", nap))
+    app.add_handler(CommandHandler("random", random_acc))
+    app.add_handler(CommandHandler("myacc", myacc))
+    app.add_handler(CommandHandler("cong", cong))
+    app.add_handler(CommandHandler("trutien", trutien))
+    app.add_handler(CommandHandler("top", top))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("addadmin", addadmin))
+    app.add_handler(CommandHandler("addacc", addacc))
 
-    # Handlers
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
