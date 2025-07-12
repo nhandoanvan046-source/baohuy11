@@ -49,9 +49,9 @@ def is_admin(user_id: int):
 # --- Commands ---
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     txt = (
-        "🎮 *SHOP ACC LIÊN QUÂN*\n\n"
-        "🔄 /random - Mua acc ngẫu nhiên\n"
-        "📦 /myacc - Xem acc đã mua\n"
+        "🎮 *SHOP ACC LIÊN QUÂN Bảo Huy*\n\n"
+        "🔄👮 /random - Mua acc ngẫu nhiên\n"
+        "😛 /myacc - Xem acc đã mua\n"
         "💰 /sodu - Kiểm tra số dư\n"
         "💳 /nap <sotien> - Nạp tiền\n"
         "📊 /stats - Thống kê shop\n"
@@ -128,7 +128,7 @@ async def random_acc(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not available:
         return await update.message.reply_text("❌ Hết acc để random!")
 
-    price = 1000
+    price = 2000
     bal = balances.get(user_id, 0)
     if bal < price:
         return await update.message.reply_text(f"❌ Bạn không đủ {price:,} VND để mua acc.")
@@ -197,11 +197,11 @@ async def trutien(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     balances = load_json(FILE_BALANCES)
     if balances.get(uid, 0) < amount:
-        return await update.message.reply_text(f"⚠️ User `{uid}` không đủ tiền!", parse_mode='Markdown')
+        return await update.message.reply_text(f"⚠️ User `{uid}` không đủ tiền!", parse_mode="Markdown")
 
     balances[uid] -= amount
     save_json(FILE_BALANCES, balances)
-    await update.message.reply_text(f"✅ Đã trừ {amount:,} VND từ user `{uid}`", parse_mode='Markdown')
+    await update.message.reply_text(f"✅ Đã trừ {amount:,} VND từ user `{uid}`", parse_mode="Markdown")
 
 # --- Callback xử lý duyệt nạp ---
 async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
