@@ -1,8 +1,11 @@
 import os
 import json
 from datetime import datetime
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
+    ContextTypes, filters
+)
 from dotenv import load_dotenv
 from keep_alive import keep_alive
 
@@ -23,11 +26,14 @@ save_json = lambda path, data: json.dump(data, open(path, "w"), indent=2)
 def is_admin(uid):
     return uid == ADMIN_ID or str(uid) in load_json("data/admins.json")
 
+# ====== Người dùng ======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎮 Chào mừng đến với shop acc Liên Quân!\n\n"
-        "🛒 Người dùng:\n/random - Mua acc random\n/myacc - Acc đã mua\n/sodu - Kiểm tra số dư\n/nap <sotien> - Nạp tiền\n/top - TOP người giàu\n\n"
-        "🛠 Quản trị:\n/addacc <user> <pass>\n/delacc <id>\n/cong <uid> <sotien>\n/tru <uid> <sotien>\n/stats\n/addadmin <uid>"
+        "🛒 Người dùng:\n/random - Mua acc random\n/myacc - Acc đã mua\n/sodu - Kiểm tra số dư\n"
+        "/nap <sotien> - Nạp tiền\n/top - TOP người giàu\n\n"
+        "🛠 Quản trị:\n/addacc <user> <pass>\n/delacc <id>\n/cong <uid> <sotien>\n"
+        "/tru <uid> <sotien>\n/stats\n/addadmin <uid>"
     )
 
 async def sodu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,9 +57,29 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     user = update.effective_user
     caption = update.message.caption
+    photo = update.message.photo[-1].file_id
 
     if not caption or not caption.isdigit():
-        await update.message.reply_text("⚠️ Gửi ảnh có ghi chú là số tiền bạn đã chuyển (VD: 10000)")
+        await update.message.reply_text("⚠️ Gửi ảnh có chú thích là số tiền bạn đã chuyển (VD: 10000). Ảnh của bạn sẽ được gửi admin duyệt thủ công.")
+        
+        buttons = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Duyệt", callback_data=f"duyet:{uid}"),
+                InlineKeyboardButton("❌ Từ chối", callback_data=f"tu_choi:{uid}")
+            ]
+        ])
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID,
+            photo=photo,
+            caption=(
+                f"📸 Ảnh cần duyệt thủ công:\n"
+                f"👤 @{user.username or 'Không rõ'} | UID: `{uid}`\n"
+                f"💬 Caption: {caption or 'Không có'}\n"
+                f"🕒 {datetime.now().strftime('%H:%M:%S %d-%m-%Y')}"
+            ),
+            parse_mode="Markdown",
+            reply_markup=buttons
+        )
         return
 
     sotien = int(caption)
@@ -61,19 +87,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logs = load_json("data/duyet_log.json")
 
     users[uid] = users.get(uid, 0) + sotien
-    logs.append({
-        "uid": uid,
-        "amount": sotien,
-        "status": "Auto",
-        "time": datetime.now().isoformat()
-    })
+    logs.append({"uid": uid, "amount": sotien, "status": "Auto", "time": datetime.now().isoformat()})
 
     save_json("data/user.json", users)
     save_json("data/duyet_log.json", logs)
 
-    await update.message.reply_text(f"✅ Đã cộng {sotien:,}đ vào tài khoản!")
+    await update.message.reply_text(
+        f"✅ Bạn đã được cộng *{sotien:,}đ* vào tài khoản.\n"
+        f"💳 Số dư hiện tại: *{users[uid]:,}đ*",
+        parse_mode="Markdown"
+    )
+    await context.bot.send_sticker(chat_id=uid, sticker="CAACAgUAAxkBAAEB2A9lmkys-kI4ld-pmvgxJgU4kFgZxwACmAADVp29VZ8X0pyB_JTfNAQ")
 
-    photo = update.message.photo[-1].file_id
     text = (
         f"📥 Giao dịch mới auto duyệt:\n"
         f"👤 @{user.username or 'Không rõ'} | UID: `{uid}`\n"
@@ -125,6 +150,7 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"{i+1}. UID {uid} - {bal:,}đ\n"
     await update.message.reply_text(msg)
 
+# ====== Admin ======
 async def addacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id): return
     if len(context.args) < 2: return
@@ -178,6 +204,57 @@ async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json("data/admins.json", admins)
     await update.message.reply_text("✅ Đã thêm admin phụ.")
 
+# ====== Callback ======
+async def photo_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data.startswith("duyet:"):
+        uid = data.split(":")[1]
+        if not is_admin(update.effective_user.id):
+            await query.edit_message_caption(caption="❌ Bạn không có quyền duyệt giao dịch này.")
+            return
+
+        sotien = 10000
+        users = load_json("data/user.json")
+        logs = load_json("data/duyet_log.json")
+
+        users[uid] = users.get(uid, 0) + sotien
+        logs.append({"uid": uid, "amount": sotien, "status": "Manual", "time": datetime.now().isoformat()})
+        save_json("data/user.json", users)
+        save_json("data/duyet_log.json", logs)
+
+        await query.edit_message_caption(caption=f"✅ Đã duyệt thủ công {sotien:,}đ cho UID {uid}!")
+        await context.bot.send_message(
+            chat_id=int(uid),
+            text=(
+                f"✅ Giao dịch của bạn đã được *admin duyệt thủ công*.\n"
+                f"💰 Bạn đã được cộng *{sotien:,}đ* vào tài khoản.\n"
+                f"💳 Số dư hiện tại: *{users[uid]:,}đ*"
+            ),
+            parse_mode="Markdown"
+        )
+        await context.bot.send_sticker(chat_id=int(uid), sticker="CAACAgUAAxkBAAEB2A9lmkys-kI4ld-pmvgxJgU4kFgZxwACmAADVp29VZ8X0pyB_JTfNAQ")
+
+    elif data.startswith("tu_choi:"):
+        uid = data.split(":")[1]
+        if not is_admin(update.effective_user.id):
+            await query.edit_message_caption(caption="❌ Bạn không có quyền từ chối giao dịch này.")
+            return
+
+        await query.edit_message_caption(caption=f"❌ Giao dịch bị từ chối bởi admin.")
+        try:
+            await context.bot.send_message(
+                chat_id=int(uid),
+                text="❌ Giao dịch nạp tiền của bạn đã bị *từ chối* bởi admin.\n"
+                     "Vui lòng gửi lại ảnh nạp tiền kèm chú thích là *số tiền hợp lệ*.",
+                parse_mode="Markdown"
+            )
+        except:
+            pass
+
+# ====== MAIN ======
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -193,6 +270,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("addadmin", addadmin))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(CallbackQueryHandler(photo_callback_handler))
     print("🤖 Bot đang chạy...")
     app.run_polling()
-        
