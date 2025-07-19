@@ -5,3 +5,4 @@ pytesseract
 Pillow
 pyTelegramBotAPI
 fastapi
+uvicorn
