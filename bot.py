@@ -1,253 +1,168 @@
-import os
+import telebot
+from telebot import types
 import json
-from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
-                          ContextTypes, filters, ChatMemberHandler)
-from dotenv import load_dotenv
+import os
 
-load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+API_TOKEN = '6320148381:AAGCb3fXaCVSW6Gu4ho3PBLN4RV__hDyxk0'
+bot = telebot.TeleBot(API_TOKEN)
+ADMIN_IDS = [5736655322]  # Thay bằng ID admin thật
 
-# === Tạo thư mục & file cần thiết ===
-os.makedirs("data", exist_ok=True)
-for f in ["user.json", "acc.json", "log.json", "admins.json", "duyet_log.json", "pending.json"]:
-    if not os.path.exists(f"data/{f}"):
-        with open(f"data/{f}", "w") as file:
-            json.dump({} if "user" in f or "admins" in f else [], file)
+# File lưu cảnh cáo và video
+WARN_FILE = 'warns.json'
+VIDEO_FILE = 'video.txt'
+CAPTCHA_FILE = 'captcha.json'
 
-# === Load/save JSON ===
-load_json = lambda path: json.load(open(path))
-save_json = lambda path, data: json.dump(data, open(path, "w"), indent=2)
+if not os.path.exists(WARN_FILE):
+    with open(WARN_FILE, 'w') as f:
+        json.dump({}, f)
 
-# === Check admin ===
-def is_admin(uid):
-    return uid == ADMIN_ID or str(uid) in load_json("data/admins.json")
+if not os.path.exists(CAPTCHA_FILE):
+    with open(CAPTCHA_FILE, 'w') as f:
+        json.dump({"enabled": False}, f)
 
-# === LỆNH NGƯỜI DÙNG ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🎮 Chào mừng đến với shop acc Liên Quân!\n\n"
-        "🛒 Người dùng:\n/random - Mua acc random\n/myacc - Acc đã mua\n/sodu - Kiểm tra số dư\n/nap <sotien> - Nạp tiền\n/top - TOP người giàu\n\n"
-        "🛠 Quản trị:\n/addacc <user> <pass>\n/delacc <id>\n/cong <uid> <sotien>\n/tru <uid> <sotien>\n/stats\n/addadmin <uid>"
-    )
+def is_admin(message):
+    return message.from_user.id in ADMIN_IDS
 
-async def sodu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    users = load_json("data/user.json")
-    await update.message.reply_text(f"💰 Số dư của bạn: {users.get(uid, 0):,}đ")
+def load_warns():
+    with open(WARN_FILE) as f:
+        return json.load(f)
 
-async def nap(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) != 1:
-        return await update.message.reply_text("⚠️ Dùng đúng cú pháp: /nap <sotien>")
-    sotien = context.args[0]
-    uid = update.effective_user.id
-    await update.message.reply_text(
-        f"💳 Vui lòng chuyển khoản theo thông tin sau:\n\n"
-        f"- 📲 STK: 0971487462\n- 🏦 Ngân hàng: MB Bank\n- 💬 Nội dung: {uid}\n- 💰 Số tiền: {sotien} VND\n\n"
-        f"📸 Sau đó gửi ảnh chuyển khoản vào bot. Ghi số tiền vào caption để tự duyệt."
-    )
+def save_warns(data):
+    with open(WARN_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
 
-# === Gửi ảnh chuyển khoản ===
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    user = update.effective_user
-    caption = update.message.caption
-    photo_id = update.message.photo[-1].file_id
-
-    if caption and caption.isdigit():
-        sotien = int(caption)
-        users = load_json("data/user.json")
-        users[uid] = users.get(uid, 0) + sotien
-        logs = load_json("data/duyet_log.json")
-        logs.append({"uid": uid, "amount": sotien, "status": "Auto", "time": datetime.now().isoformat()})
-        save_json("data/user.json", users)
-        save_json("data/duyet_log.json", logs)
-        await update.message.reply_text(f"✅ Đã cộng {sotien:,}đ vào tài khoản!")
-        await context.bot.send_sticker(chat_id=uid, sticker="CAACAgUAAxkBAAEJyo5lgn-TGyazHhrbT-pZowABkKImZqAAAj0DAAKWAZhVIYyVMD-HdAE0BA")
+@bot.message_handler(commands=['setvideo'])
+def set_video(message):
+    if not is_admin(message):
         return
-
-    pending = load_json("data/pending.json")
-    tid = str(len(pending))
-    pending[tid] = {"uid": uid, "photo_id": photo_id, "username": user.username or "Ẩn"}
-    save_json("data/pending.json", pending)
-
-    btns = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ Duyệt 10k", callback_data=f"approve:{tid}:10000"),
-            InlineKeyboardButton("❌ Từ chối", callback_data=f"deny:{tid}")
-        ]
-    ])
-    await context.bot.send_photo(
-        chat_id=ADMIN_ID,
-        photo=photo_id,
-        caption=f"🧾 Giao dịch cần duyệt thủ công\n👤 @{user.username or 'Ẩn'} | UID: {uid}",
-        reply_markup=btns
-    )
-    await update.message.reply_text("⏳ Giao dịch đang chờ admin duyệt")
-
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    pending = load_json("data/pending.json")
-
-    if data.startswith("approve"):
-        _, tid, amount = data.split(":")
-        if tid not in pending: return
-        item = pending.pop(tid)
-        users = load_json("data/user.json")
-        users[item['uid']] = users.get(item['uid'], 0) + int(amount)
-        save_json("data/user.json", users)
-        save_json("data/pending.json", pending)
-        await query.edit_message_caption(f"✅ Đã duyệt {amount}đ cho @{item['username']}")
-        await context.bot.send_message(int(item['uid']), f"✅ Giao dịch {amount}đ đã được admin duyệt")
-    elif data.startswith("deny"):
-        _, tid = data.split(":")
-        if tid not in pending: return
-        item = pending.pop(tid)
-        save_json("data/pending.json", pending)
-        await query.edit_message_caption("❌ Giao dịch bị từ chối")
-        await context.bot.send_message(int(item['uid']), "❌ Giao dịch đã bị từ chối")
-
-async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    users = load_json("data/user.json")
-    accs = load_json("data/acc.json")
-    log = load_json("data/log.json")
-    if users.get(uid, 0) < 2000:
-        return await update.message.reply_text("⚠️ Cần 2.000đ để mua acc")
-    if not accs:
-        return await update.message.reply_text("📦 Hết acc trong kho")
-    acc = accs.pop(0)
-    users[uid] = users.get(uid, 0) - 2000
-    log.append({"uid": uid, "acc": acc})
-    save_json("data/user.json", users)
-    save_json("data/acc.json", accs)
-    save_json("data/log.json", log)
-    await update.message.reply_text(f"🔐 Acc: `{acc['user']}|{acc['pass']}`", parse_mode='Markdown')
-
-async def myacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.effective_user.id)
-    log = load_json("data/log.json")
-    accs = [f"{i+1}. {l['acc']['user']}|{l['acc']['pass']}" for i, l in enumerate(log) if l['uid'] == uid]
-    if not accs:
-        await update.message.reply_text("📭 Bạn chưa mua acc nào.")
+    if message.reply_to_message and message.reply_to_message.video:
+        file_id = message.reply_to_message.video.file_id
+        with open(VIDEO_FILE, 'w') as f:
+            f.write(file_id)
+        bot.reply_to(message, "✅ Video uptime đã được lưu.")
     else:
-        await update.message.reply_text("🗂 Acc đã mua:\n" + "\n".join(accs))
+        bot.reply_to(message, "Vui lòng reply một video để lưu.")
 
-async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    users = load_json("data/user.json")
-    if not users: return await update.message.reply_text("📭 Chưa có dữ liệu")
-    top_users = sorted(users.items(), key=lambda x: x[1], reverse=True)[:10]
-    msg = "🏆 Top người dùng:\n"
-    for i, (uid, bal) in enumerate(top_users):
-        msg += f"{i+1}. UID {uid} - {bal:,}đ\n"
-    await update.message.reply_text(msg)
-
-# === ADMIN ===
-async def addacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id): return
-    if len(context.args) < 2: return
-    accs = load_json("data/acc.json")
-    accs.append({"user": context.args[0], "pass": context.args[1]})
-    save_json("data/acc.json", accs)
-    await update.message.reply_text("✅ Đã thêm acc")
-
-async def delacc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id): return
-    if len(context.args) != 1: return
-    idx = int(context.args[0])
-    accs = load_json("data/acc.json")
-    if 0 <= idx < len(accs):
-        accs.pop(idx)
-        save_json("data/acc.json", accs)
-        await update.message.reply_text("✅ Đã xoá acc")
+@bot.message_handler(commands=['getvideo'])
+def get_video(message):
+    if os.path.exists(VIDEO_FILE):
+        with open(VIDEO_FILE) as f:
+            bot.send_video(message.chat.id, f.read())
     else:
-        await update.message.reply_text("❌ ID không hợp lệ")
+        bot.reply_to(message, "Chưa có video uptime nào.")
 
-async def cong(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id): return
-    uid, amount = context.args
-    users = load_json("data/user.json")
-    users[uid] = users.get(uid, 0) + int(amount)
-    save_json("data/user.json", users)
-    await update.message.reply_text("✅ Đã cộng tiền")
+@bot.message_handler(commands=['sendvideo'])
+def send_video(message):
+    if not is_admin(message):
+        return
+    if os.path.exists(VIDEO_FILE):
+        with open(VIDEO_FILE) as f:
+            bot.send_video(message.chat.id, f.read())
+    else:
+        bot.reply_to(message, "Chưa có video uptime nào.")
 
-async def tru(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id): return
-    uid, amount = context.args
-    users = load_json("data/user.json")
-    users[uid] = max(0, users.get(uid, 0) - int(amount))
-    save_json("data/user.json", users)
-    await update.message.reply_text("✅ Đã trừ tiền")
+@bot.message_handler(commands=['warn'])
+def warn_user(message):
+    if not is_admin(message):
+        return
+    if not message.reply_to_message:
+        return bot.reply_to(message, "Hãy reply người cần cảnh cáo.")
+    user_id = str(message.reply_to_message.from_user.id)
+    warns = load_warns()
+    warns[user_id] = warns.get(user_id, 0) + 1
+    save_warns(warns)
+    if warns[user_id] >= 3:
+        bot.kick_chat_member(message.chat.id, int(user_id))
+        bot.reply_to(message, f"🚫 Người dùng đã bị ban do nhận 3 cảnh cáo.")
+    else:
+        bot.reply_to(message, f"⚠️ Đã cảnh cáo {warns[user_id]}/3.")
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id): return
-    accs = load_json("data/acc.json")
-    log = load_json("data/log.json")
-    await update.message.reply_text(f"📊 Còn {len(accs)} acc | Đã bán {len(log)}")
+@bot.message_handler(commands=['warnings'])
+def show_warnings(message):
+    if not is_admin(message):
+        return
+    if not message.reply_to_message:
+        return bot.reply_to(message, "Hãy reply người cần kiểm tra.")
+    user_id = str(message.reply_to_message.from_user.id)
+    warns = load_warns()
+    count = warns.get(user_id, 0)
+    bot.reply_to(message, f"⚠️ Người này có {count}/3 cảnh cáo.")
 
-async def addadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id): return
-    uid = context.args[0]
-    admins = load_json("data/admins.json")
-    admins[uid] = True
-    save_json("data/admins.json", admins)
-    await update.message.reply_text("✅ Đã thêm admin phụ")
+@bot.message_handler(commands=['resetwarns'])
+def reset_warnings(message):
+    if not is_admin(message):
+        return
+    if not message.reply_to_message:
+        return bot.reply_to(message, "Hãy reply người cần xóa cảnh cáo.")
+    user_id = str(message.reply_to_message.from_user.id)
+    warns = load_warns()
+    if user_id in warns:
+        del warns[user_id]
+        save_warns(warns)
+        bot.reply_to(message, "✅ Đã xóa cảnh cáo.")
+    else:
+        bot.reply_to(message, "❌ Người này không có cảnh cáo.")
 
-# === CAPTCHA ===
-new_users = {}
+@bot.message_handler(commands=['ban'])
+def ban_user(message):
+    if is_admin(message) and message.reply_to_message:
+        bot.kick_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+        bot.reply_to(message, "🚫 Đã ban người dùng.")
 
-async def new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    m = update.chat_member
-    if m.new_chat_member.status != "member": return
-    uid = m.from_user.id
-    chat_id = m.chat.id
-    new_users[uid] = datetime.now() + timedelta(minutes=1)
-    btn = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Tôi không phải bot", callback_data=f"captcha:{uid}:{chat_id}")]])
-    await context.bot.send_message(chat_id, f"👋 Chào mừng <a href='tg://user?id={uid}'>bạn</a>! Vui lòng xác minh trong 60s.", parse_mode='HTML', reply_markup=btn)
+@bot.message_handler(commands=['kick'])
+def kick_user(message):
+    if is_admin(message) and message.reply_to_message:
+        bot.ban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+        bot.unban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+        bot.reply_to(message, "👢 Đã kick người dùng.")
 
-async def handle_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    _, uid, cid = q.data.split(":")
-    if int(uid) != q.from_user.id: return await q.reply_text("❌ Không xác minh hộ người khác!")
-    if int(uid) not in new_users: return await q.edit_message_text("❌ Quá hạn xác minh")
-    del new_users[int(uid)]
-    await q.edit_message_text("✅ Đã xác minh thành công")
+@bot.message_handler(commands=['mute'])
+def mute_user(message):
+    if is_admin(message) and message.reply_to_message:
+        bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
+                                 permissions=types.ChatPermissions(can_send_messages=False))
+        bot.reply_to(message, "🔇 Đã tắt tiếng người dùng.")
 
-async def check_kick(context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now()
-    for uid, time in list(new_users.items()):
-        if now > time:
-            try:
-                await context.bot.ban_chat_member(chat_id=context.job.chat_id, user_id=uid)
-                await context.bot.unban_chat_member(chat_id=context.job.chat_id, user_id=uid)
-                del new_users[uid]
-            except: pass
+@bot.message_handler(commands=['unmute'])
+def unmute_user(message):
+    if is_admin(message) and message.reply_to_message:
+        bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
+                                 permissions=types.ChatPermissions(can_send_messages=True,
+                                                                   can_send_media_messages=True,
+                                                                   can_send_other_messages=True,
+                                                                   can_add_web_page_previews=True))
+        bot.reply_to(message, "🔊 Đã bỏ tắt tiếng.")
 
-# === KHỞI ĐỘNG ===
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("sodu", sodu))
-    app.add_handler(CommandHandler("nap", nap))
-    app.add_handler(CommandHandler("random", random))
-    app.add_handler(CommandHandler("myacc", myacc))
-    app.add_handler(CommandHandler("top", top))
-    app.add_handler(CommandHandler("addacc", addacc))
-    app.add_handler(CommandHandler("delacc", delacc))
-    app.add_handler(CommandHandler("cong", cong))
-    app.add_handler(CommandHandler("tru", tru))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("addadmin", addadmin))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(ChatMemberHandler(new_member, ChatMemberHandler.CHAT_MEMBER))
-    app.add_handler(CallbackQueryHandler(handle_captcha))
-    app.job_queue.run_repeating(check_kick, interval=10)
-    print("🤖 Bot đang chạy...")
-    app.run_polling()
-    
+@bot.message_handler(commands=['lock'])
+def lock_group(message):
+    if is_admin(message):
+        bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=False))
+        bot.reply_to(message, "🔒 Nhóm đã bị khóa.")
+
+@bot.message_handler(commands=['unlock'])
+def unlock_group(message):
+    if is_admin(message):
+        bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=True,
+                                                                         can_send_media_messages=True,
+                                                                         can_send_other_messages=True,
+                                                                         can_add_web_page_previews=True))
+        bot.reply_to(message, "🔓 Nhóm đã được mở khóa.")
+
+@bot.message_handler(commands=['captcha'])
+def toggle_captcha(message):
+    if not is_admin(message):
+        return
+    with open(CAPTCHA_FILE, 'r') as f:
+        data = json.load(f)
+    data["enabled"] = not data["enabled"]
+    with open(CAPTCHA_FILE, 'w') as f:
+        json.dump(data, f)
+    status = "Bật" if data["enabled"] else "Tắt"
+    bot.reply_to(message, f"✅ Đã {status} xác minh captcha (demo).")
+
+from keep_alive import keep_alive
+import threading
+
+threading.Thread(target=keep_alive).start()
+print("Bot is running...")
+bot.polling()
