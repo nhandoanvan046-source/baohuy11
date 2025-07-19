@@ -1,11 +1,11 @@
-from flask import Flask
-from threading import Thread
+from fastapi import FastAPI
+import uvicorn
 
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route('/')
-def home():
-    return "Bot Huy running!"
+@app.get("/")
+def ping():
+    return {"status": "bot is huy"}
 
 def keep_alive():
-    Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
+    uvicorn.run(app, host="0.0.0.0", port=10000)
