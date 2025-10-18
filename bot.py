@@ -2,28 +2,25 @@ import os
 import requests
 import asyncio
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from keep_alive import keep_alive  # Giữ bot hoạt động 24/7 trên Render
 
 # --- CẤU HÌNH ---
-BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"  # Token bot
-GROUP_ID = -1002666964512  # ID nhóm muốn bot tự gửi kết quả
+BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"
+GROUP_ID = -1002666964512
 API_URL = "https://sunwinsaygex.onrender.com/api/taixiu/sunwin"
 
 
-# --- HÀM LẤY DỮ LIỆU API ---
+# --- LẤY KẾT QUẢ ---
 def get_taixiu_result():
     try:
         res = requests.get(API_URL, timeout=10)
         if res.status_code != 200:
             return f"⚠️ API lỗi ({res.status_code})"
+
         data = res.json()
-        phien = data.get("phien")
-        ketqua = data.get("ketqua")
+        phien = data.get("phien", "Không rõ")
+        ketqua = data.get("ketqua", "Không rõ")
         du_doan = "Tài" if ketqua == "Tài" else "Xỉu"
 
         text = (
@@ -34,33 +31,31 @@ def get_taixiu_result():
         )
         return text
     except Exception as e:
-        return f"⚠️ Lỗi khi lấy dữ liệu API: {e}"
+        return f"⚠️ Lỗi API: {e}"
 
 
 # --- LỆNH /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "🌞 <b>Chào mừng đến với bot Sunwin Tài Xỉu!</b>\n"
+    await update.message.reply_html(
+        "🌞 <b>Chào mừng đến với bot Sunwin TX!</b>\n"
         "Gõ /taixiu để xem kết quả mới nhất 🎯"
     )
-    await update.message.reply_html(text)
 
 
 # --- LỆNH /taixiu ---
 async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⏳ Đang lấy kết quả mới nhất, vui lòng đợi...")
+    await update.message.reply_text("⏳ Đang lấy kết quả mới nhất...")
     result = get_taixiu_result()
     await asyncio.sleep(2)
     await update.message.reply_html(result)
 
-    # 🌀 Tự động trả lời lại sau vài giây
+    # Auto phản hồi sau vài giây
     await asyncio.sleep(10)
-    await update.message.reply_html("🔁 Đang cập nhật kết quả mới...")
-    new_result = get_taixiu_result()
-    await update.message.reply_html(new_result)
+    await update.message.reply_html("🔁 Cập nhật kết quả mới...")
+    await update.message.reply_html(get_taixiu_result())
 
 
-# --- HÀM AUTO GỬI KẾT QUẢ VÀO NHÓM ---
+# --- GỬI AUTO VÀO NHÓM ---
 async def auto_send_result(app):
     last_result = None
     while True:
@@ -71,29 +66,25 @@ async def auto_send_result(app):
                 last_result = result
         except Exception as e:
             print("❌ Lỗi auto gửi:", e)
-        await asyncio.sleep(180)  # Gửi lại mỗi 3 phút
+        await asyncio.sleep(180)  # 3 phút 1 lần
 
 
-# --- CHẠY BOT ---
+# --- MAIN ---
 async def main():
-    keep_alive()  # Giữ bot online 24/7
+    keep_alive()  # chạy Flask để Render không tắt bot
+
+    print("✅ Khởi động bot Sunwin TX...")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Lệnh chính
+    # Đăng ký lệnh
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
 
-    print("✅ Bot Sunwin TX đang khởi động...")
-    await app.initialize()
-    await app.start()
-    print("🤖 Bot Sunwin TX đã sẵn sàng nhận lệnh!")
-
-    # Auto gửi kết quả vào nhóm
+    # Auto gửi kết quả nền
     asyncio.create_task(auto_send_result(app))
 
-    # Chạy polling để bot phản hồi
-    await app.updater.start_polling()
-    await app.updater.idle()
+    print("🤖 Bot đang chạy và sẵn sàng nhận lệnh!")
+    await app.run_polling()  # <- FIX QUAN TRỌNG (thay vì app.updater)
 
 
 if __name__ == "__main__":
