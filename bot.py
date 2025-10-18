@@ -174,7 +174,7 @@ async def build_msg(phien, ketqua):
         f"🔥 Xu hướng: {trend}\n"
         f"🏆 Winrate: {wr}\n"
         f"📌 Dự đoán: {predict}\n"
-        f"⚖️ Cầu 3–18: {cau}"
+        f"⚖️ Cầu : {cau}"
     )
     if alert: msg += f"\n⚠️ Alert: {alert}"
     if sp: msg += f"\n⚠️ Special: {sp}"
