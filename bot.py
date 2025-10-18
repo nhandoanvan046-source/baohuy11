@@ -131,7 +131,7 @@ def analyze_cau_advanced(min_len=3, max_len=18):
     
     return "Cầu phân tích:\n" + "\n".join(results + alerts)
 
-# ===== DỰ ĐOÁN XÍ NGẦU =====
+# ===== DỰ ĐOÁN XÍ NGẦU & CẦU =====
 def predict_next_trend():
     if not history_trend:
         return "Chưa đủ dữ liệu để dự đoán"
@@ -145,6 +145,19 @@ def predict_next_trend():
         tai_count = sum(1 for r in history_all if r["ket_qua"] == "Tài")
         xiu_count = sum(1 for r in history_all if r["ket_qua"] == "Xỉu")
         return f"Dự đoán thống kê: {'Tài' if tai_count>=xiu_count else 'Xỉu'} (Winrate: Tài {tai_count/total*100:.1f}% | Xỉu {xiu_count/total*100:.1f}%)"
+
+def auto_predict_cau():
+    if len(history_trend) < 3:
+        return "Chưa đủ dữ liệu dự đoán cầu"
+    last3 = list(history_trend)[-3:]
+    if all(r == "Tài" for r in last3):
+        return "⚡ Dự đoán cầu: Xỉu có khả năng ra để cân bằng"
+    elif all(r == "Xỉu" for r in last3):
+        return "⚡ Dự đoán cầu: Tài có khả năng ra để cân bằng"
+    else:
+        tai_count = sum(1 for r in history_all if r["ket_qua"] == "Tài")
+        xiu_count = sum(1 for r in history_all if r["ket_qua"] == "Xỉu")
+        return f"⚡ Dự đoán cầu theo winrate: {'Tài' if tai_count>=xiu_count else 'Xỉu'}"
 
 def dice_face_probability_advanced(last_n=10):
     faces = []
@@ -179,6 +192,7 @@ def build_msg(phien, ketqua, tong, x1, x2, x3):
     alert = check_alert()
     sp = check_special()
     predict = predict_next_trend()
+    predict_cau = auto_predict_cau()
     cau_analysis = analyze_cau_advanced()
     dice_stats = dice_face_probability_advanced(10)
     prev = "Chưa có"
@@ -194,7 +208,7 @@ def build_msg(phien, ketqua, tong, x1, x2, x3):
         f"Xúc xắc: {dice_display}\n"
         f"Kết quả: {ketqua}\n"
         f"Phiên trước: {prev}\n\n"
-        f"{trend}\n{wr}\n{predict}\n{cau_analysis}\n{dice_stats}"
+        f"{trend}\n{wr}\n{predict}\n{predict_cau}\n{cau_analysis}\n{dice_stats}"
     )
     if alert:
         msg += f"\n{alert}"
@@ -256,4 +270,4 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.create_task(main())
     loop.run_forever()
-                      
+        
