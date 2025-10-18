@@ -53,13 +53,22 @@ async def get_dice_data():
     except:
         return None, None, (None, None, None, None)
 
-def save(phien, ketqua):
-    record = {"phien":phien,"ketqua":ketqua,"time":datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+def save(phien, ketqua, x1=None, x2=None, x3=None):
+    record = {
+        "phien": phien,
+        "ketqua": ketqua,
+        "x1": x1,
+        "x2": x2,
+        "x3": x3,
+        "tong": (x1+x2+x3) if x1 else None,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
     history_all.append(record)
     history_trend.append(ketqua)
     with open(HISTORY_FILE,"w",encoding="utf-8") as f:
         json.dump(history_all,f,ensure_ascii=False,indent=2)
 
+# ===== PHÂN TÍCH TÀI/XỈU =====
 def analyze_trend():
     tai = history_trend.count("Tài")
     xiu = history_trend.count("Xỉu")
@@ -112,7 +121,6 @@ def analyze_cau(min_len=3,max_len=18):
     return " | ".join(results)
 
 def auto_cau_alert():
-    """Tự động phát hiện chuỗi Tài/Xỉu 3–18 phiên gần nhất"""
     trend = list(history_trend)
     alerts = []
     for length in range(18,2,-1):
@@ -125,7 +133,20 @@ def auto_cau_alert():
     if alerts: return " | ".join(alerts)
     return None
 
-# ===== BUILD MESSAGE ĐẸP GỌN =====
+# ===== PHÂN TÍCH CẦU XÍ NGẦU =====
+def analyze_dice_cau(n=10):
+    """Phân tích cầu viên 1-3 n phiên gần nhất"""
+    res = []
+    for i in range(1,4):
+        line = []
+        for r in history_all[-n:]:
+            xi = r.get(f"x{i}")
+            if xi is not None:
+                line.append(str(xi))
+        res.append(f"🎲 Viên {i}: {' → '.join(line)}")
+    return "\n".join(res) if res else "Chưa có dữ liệu"
+
+# ===== BUILD MESSAGE =====
 async def build_msg(phien, ketqua):
     prev = "Chưa có"
     if len(history_all)>=2:
@@ -139,26 +160,28 @@ async def build_msg(phien, ketqua):
     alert = check_alert()
     sp = check_special()
     cau_alert = auto_cau_alert()
+    dice_cau = analyze_dice_cau(10)  # 10 phiên gần nhất
 
-    # Xúc xắc
+    # Xúc xắc phiên hiện tại
     _, _, dice = await get_dice_data()
     x1,x2,x3,tong = dice
-    dice_msg = f"[{x1} | {x2} | {x3}] → Tổng: {tong}" if x1 else "Chưa có dữ liệu"
+    dice_msg = f"[{x1} | {x2} | {x3}] → {tong}" if x1 else "Chưa có dữ liệu"
 
     msg = (
         f"🌞 Sunwin TX - Phiên {phien}\n"
         f"🕐 {datetime.now().strftime('%H:%M:%S')}\n"
         f"🎯 Kết quả: {ketqua}\n"
         f"📜 Phiên trước: {prev}\n"
-        f"🎲 Xúc xắc: {dice_msg}\n"
+        f"🎲 Xúc xắc hiện tại: {dice_msg}\n"
         f"🔥 Xu hướng: {trend}\n"
         f"🏆 Winrate: {wr}\n"
         f"📌 Dự đoán: {predict}\n"
-        f"⚖️ Cầu : {cau}"
+        f"⚖️ Cầu 3–18: {cau}"
     )
     if alert: msg += f"\n⚠️ Alert: {alert}"
     if sp: msg += f"\n⚠️ Special: {sp}"
     if cau_alert: msg += f"\n📊 Cầu tự động: {cau_alert}"
+    msg += f"\n🎲 Cầu viên 1–3 (10 phiên gần nhất):\n{dice_cau}"
     return msg
 
 # ===== LỆNH BOT =====
@@ -174,7 +197,10 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not phien:
         await update.message.reply_text("⚠️ Không thể lấy dữ liệu")
         return
-    save(phien, ketqua)
+    # Lấy dice hiện tại
+    _, _, dice = await get_dice_data()
+    x1,x2,x3,_ = dice
+    save(phien, ketqua, x1, x2, x3)
     await update.message.reply_text(await build_msg(phien, ketqua))
 
 async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -191,26 +217,25 @@ async def auto_check(app):
         try:
             await asyncio.sleep(CHECK_INTERVAL)
             phien, ketqua = await get_sunwin_data()
-            if not phien or phien==last_phien: continue
+            if not phien or not ketqua or phien==last_phien:
+                continue
+            _, _, dice = await get_dice_data()
+            x1,x2,x3,_ = dice
             last_phien = phien
-            save(phien, ketqua)
+            save(phien, ketqua, x1, x2, x3)
             await app.bot.send_message(GROUP_ID, await build_msg(phien, ketqua))
             print(f"[✅] {phien} ({ketqua}) gửi thành công")
         except Exception as e:
             print(f"[❌] Lỗi auto_check: {e}")
 
 # ===== CHẠY BOT =====
-async def main():
-    print("🚀 Khởi động bot Sunwin TX AI + Alert + Cầu 3–18 + Xúc xắc...")
+if __name__=="__main__":
+    print("🚀 Khởi động bot Sunwin TX AI + Alert + Cầu 3–18 + Xúc xắc + Phân tích viên...")
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
     app.add_handler(CommandHandler("prev", prev))
-
-    asyncio.create_task(auto_check(app))
-    await app.run_polling()
-
-if __name__=="__main__":
-    asyncio.run(main())
-    
+    app.create_task(auto_check(app))
+    app.run_polling()
+                                                  
