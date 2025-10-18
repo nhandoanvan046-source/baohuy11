@@ -1,17 +1,15 @@
-from fastapi import FastAPI
+from flask import Flask
 from threading import Thread
-import uvicorn
 
-app = FastAPI()
+app = Flask('')
 
-@app.get("/")
+@app.route('/')
 def home():
-    return {"status": "Bot is alive!"}
+    return "Sunwin TX bot đang hoạt động!"
 
 def run():
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+    app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
-    thread = Thread(target=run)
-    thread.daemon = True
-    thread.start()
+    t = Thread(target=run)
+    t.start()
