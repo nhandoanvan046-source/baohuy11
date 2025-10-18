@@ -77,7 +77,7 @@ def check_special():
     return None
 
 def predict_next():
-    # AI dự đoán phiên tiếp theo dựa trên tần suất 10 phiên gần nhất
+    # Dự đoán phiên tiếp theo dựa trên tần suất 10 phiên gần nhất
     count = Counter(history_trend)
     if not count: return "📊 Chưa đủ dữ liệu"
     return "Dự đoán phiên tiếp theo: Tài" if count["Tài"]>count["Xỉu"] else "Dự đoán phiên tiếp theo: Xỉu"
@@ -133,6 +133,11 @@ if __name__=="__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
-    asyncio.create_task(auto_send_by_phien(app))  # Auto gửi theo phiên mới
-    app.run_polling()
+
+    async def main():
+        # Tạo task auto gửi theo phiên mới
+        asyncio.create_task(auto_send_by_phien(app))
+        await app.run_polling()
+
+    asyncio.run(main())
     
