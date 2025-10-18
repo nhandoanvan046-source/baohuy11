@@ -125,31 +125,43 @@ def analyze_cau(min_len=3, max_len=18):
 def dice_mini_board(x1,x2,x3):
     return f"🎲 {x1} | {x2} | {x3} → Tổng: {x1+x2+x3}"
 
-# ===== AI CHỌN CẦU =====
-def ai_select_cau(last_n=3, face_n=10):
+# ===== AL CHỌN CẦU THÔNG MINH =====
+def ai_select_cau_advanced(last_n=3, face_n=10):
     if len(history_trend) < last_n:
         return "Chưa đủ dữ liệu dự đoán cầu"
+
+    # 1️⃣ Chuỗi liên tiếp
     recent = list(history_trend)[-last_n:]
+    streak_score = 0
+    if all(r=="Tài" for r in recent):
+        streak_score = -1  # ưu tiên Xỉu
+    elif all(r=="Xỉu" for r in recent):
+        streak_score = 1   # ưu tiên Tài
+
+    # 2️⃣ Winrate tổng
     tai_count = sum(1 for r in history_all if r["ket_qua"]=="Tài")
     xiu_count = sum(1 for r in history_all if r["ket_qua"]=="Xỉu")
     total = len(history_all)
-    winrate_tai = tai_count / total * 100
-    winrate_xiu = xiu_count / total * 100
+    winrate_score = (xiu_count - tai_count)/total if total else 0
+
+    # 3️⃣ Trung bình tổng xúc xắc gần nhất
     faces=[]
     for h in history_all[-face_n:]:
-        faces.extend([h.get("xuc_xac_1"),h.get("xuc_xac_2"),h.get("xuc_xac_3")])
-    avg_sum=sum(faces)/len(faces) if faces else 0
-    if all(r=="Tài" for r in recent):
-        return "🤖 AI chọn cầu: Xỉu (chuỗi Tài liên tiếp)"
-    if all(r=="Xỉu" for r in recent):
-        return "🤖 AI chọn cầu: Tài (chuỗi Xỉu liên tiếp)"
-    if winrate_tai > winrate_xiu + 5:
-        base="Tài"
-    elif winrate_xiu > winrate_tai + 5:
-        base="Xỉu"
-    else:
-        base="Tài" if avg_sum>10 else "Xỉu"
-    return f"🤖 AI chọn cầu: {base} (Winrate Tài {winrate_tai:.1f}% | Xỉu {winrate_xiu:.1f}%)"
+        faces.extend([h.get("xuc_xac_1",0),h.get("xuc_xac_2",0),h.get("xuc_xac_3",0)])
+    avg_sum = sum(faces)/len(faces) if faces else 10
+    avg_sum_score = 1 if avg_sum > 10 else -1
+
+    # 4️⃣ Xác suất mặt xúc xắc
+    face_counter = Counter(faces)
+    low_faces = face_counter[1] + face_counter[2]
+    high_faces = face_counter[5] + face_counter[6]
+    face_score = 1 if high_faces > low_faces else -1
+
+    # 5️⃣ Trọng số
+    final_score = streak_score*0.4 + winrate_score*0.3 + avg_sum_score*0.2 + face_score*0.1
+    choice = "Tài" if final_score > 0 else "Xỉu"
+
+    return f"🤖 AL chọn cầu: {choice} (Streak:{streak_score} | Winrate:{winrate_score:.2f} | AvgSum:{avg_sum_score} | Face:{face_score})"
 
 # ===== BUILD MESSAGE =====
 def build_msg(phien, ketqua, tong, x1,x2,x3):
@@ -160,14 +172,14 @@ def build_msg(phien, ketqua, tong, x1,x2,x3):
     sp=check_special()
     predict=predict_next()
     cau_analysis=analyze_cau(3,18)
-    predict_ai=ai_select_cau(3,10)
+    predict_ai=ai_select_cau_advanced(3,10)
     prev="Chưa có"
     if len(history_all)>=2:
         last=history_all[-2]
         prev=f"{last['ket_qua']} (Phiên {last['phien']})"
     dice_display=dice_mini_board(x1,x2,x3) if USE_MINIBOARD else f"{x1}|{x2}|{x3}→Tổng:{tong}"
     msg=(
-        f"Sunwin TX 🎲\n"
+        f"Sunwin TX 🎲 v4.1\n"
         f"🕒 {t}\n"
         f"🧩 Phiên: {phien}\n"
         f"Xúc xắc: {dice_display}\n"
@@ -182,7 +194,7 @@ def build_msg(phien, ketqua, tong, x1,x2,x3):
 # ===== LỆNH BOT =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Sunwin TX Bot v4.0\n• /taixiu → Xem kết quả + xu hướng + winrate + cầu 3–18\nBot auto gửi theo phiên mới 🤖"
+        "Sunwin TX Bot v4.1\n• /taixiu → Xem kết quả + xu hướng + winrate + cầu 3–18\nBot auto gửi theo phiên mới 🤖"
     )
 
 async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
