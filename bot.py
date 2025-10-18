@@ -13,7 +13,7 @@ HISTORY_FILE = "history.json"
 TREND_LEN = 10
 ALERT_STREAK = 5
 ALERT_SPECIAL = 3
-WINRATE_THRESHOLD = 70
+WINRATE_THRESHOLD = 100
 CHECK_INTERVAL = 5  # giây kiểm tra phiên mới
 USE_MINIBOARD = False  # True → mini-board, False → chữ gọn
 # ===================
