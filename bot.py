@@ -97,19 +97,16 @@ async def auto_send(app):
         phien, ketqua=get_data()
         if not phien or phien==last_phien: continue
         last_phien=phien; save(phien, ketqua)
-        try: await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua), parse_mode="Markdown"); print(f"[✅] {phien} ({ketqua})")
+        try: await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua), parse_mode="Markdown")
         except Exception as e: print(f"[❌] {e}")
 
-# ===== MAIN =====
-async def main():
+# ===== CHẠY BOT =====
+if __name__=="__main__":
     print("🚀 Khởi động bot Sunwin TX AI + Alert...")
-    keep_alive()
+    keep_alive()  # Keep-Alive Render
     app=ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
-    asyncio.create_task(auto_send(app))
-    await app.run_polling()
-
-if __name__=="__main__":
-    try: asyncio.run(main())
-    except KeyboardInterrupt: print("🛑 Bot dừng thủ công")
+    asyncio.create_task(auto_send(app))  # Auto gửi mỗi phút
+    app.run_polling()  # Chạy bot
+        
