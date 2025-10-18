@@ -55,8 +55,7 @@ def winrate():
     xiu = sum(1 for r in history_all if r["ketqua"]=="Xỉu")
     total = len(history_all)
     if total==0: return "📊 Chưa có dữ liệu"
-    bar=lambda n,total: "█"*int(n/total*20)+"░"*(20-int(n/total*20))
-    return f"🏆 Tài {tai}/{total} {bar(tai,total)}\n🏆 Xỉu {xiu}/{total} {bar(xiu,total)}"
+    return f"🏆 Tài {tai}/{total}\n🏆 Xỉu {xiu}/{total}"
 
 def check_alert():
     last = list(history_trend)[-ALERT_STREAK:]
@@ -89,7 +88,15 @@ def build_msg(phien, ketqua):
     alert = check_alert()
     sp = check_special()
     predict = predict_next()
-    msg = f"🌞 Sunwin TX\n🕐 {t}\n🧩 Phiên: {phien}\n🎯 Kết quả: {ketqua}\n\n{trend}\n{wr}\n📌 {predict}"
+    
+    # Phiên trước
+    if len(history_all) >= 2:
+        last = history_all[-2]
+        prev = f"{last['ketqua']} (Phiên {last['phien']})"
+    else:
+        prev = "Chưa có"
+    
+    msg = f"🌞 Sunwin TX\n🕐 {t}\n🧩 Phiên: {phien}\n🎯 Kết quả: {ketqua}\n📜 Phiên trước: {prev}\n\n{trend}\n{wr}\n📌 {predict}"
     if alert: msg += f"\n⚠️ {alert}"
     if sp: msg += f"\n⚠️ {sp}"
     return msg
@@ -135,4 +142,4 @@ if __name__=="__main__":
     # Tạo task async auto gửi theo phiên
     asyncio.get_event_loop().create_task(auto_check(app))
     app.run_polling()
-    
+        
