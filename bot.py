@@ -43,7 +43,8 @@ def get_data():
             d.get("xuc_xac_3"),
             d.get("tong"),
         )
-    except:
+    except Exception as e:
+        print(f"[⚠️] Lỗi get_data: {e}")
         return None, None, None, None, None, None
 
 def save(phien, ketqua, x1, x2, x3, tong):
@@ -58,6 +59,9 @@ def save(phien, ketqua, x1, x2, x3, tong):
     }
     history_all.append(record)
     history_trend.append(ketqua)
+    # Giới hạn history_all tránh file quá lớn
+    if len(history_all) > 1000:
+        history_all.pop(0)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history_all, f, ensure_ascii=False, indent=2)
 
@@ -122,49 +126,44 @@ def analyze_cau(min_len=3, max_len=18):
     return "Cầu phân tích:\n" + "\n".join(results)
 
 # ===== MINI-BOARD XÚC XẮC =====
-def dice_mini_board(x1,x2,x3):
-    return f"🎲 {x1} | {x2} | {x3} → Tổng: {x1+x2+x3}"
+def dice_mini_board(x1, x2, x3):
+    return f"🎲 {x1:02d} | {x2:02d} | {x3:02d} → Tổng: {x1+x2+x3}"
 
-# ===== AL CHỌN CẦU THÔNG MINH =====
+# ===== AI CHỌN CẦU =====
 def ai_select_cau_advanced(last_n=3, face_n=10):
     if len(history_trend) < last_n:
         return "Chưa đủ dữ liệu dự đoán cầu"
 
-    # 1️⃣ Chuỗi liên tiếp
     recent = list(history_trend)[-last_n:]
     streak_score = 0
     if all(r=="Tài" for r in recent):
-        streak_score = -1  # ưu tiên Xỉu
+        streak_score = -1
     elif all(r=="Xỉu" for r in recent):
-        streak_score = 1   # ưu tiên Tài
+        streak_score = 1
 
-    # 2️⃣ Winrate tổng
     tai_count = sum(1 for r in history_all if r["ket_qua"]=="Tài")
     xiu_count = sum(1 for r in history_all if r["ket_qua"]=="Xỉu")
     total = len(history_all)
     winrate_score = (xiu_count - tai_count)/total if total else 0
 
-    # 3️⃣ Trung bình tổng xúc xắc gần nhất
-    faces=[]
+    faces = []
     for h in history_all[-face_n:]:
         faces.extend([h.get("xuc_xac_1",0),h.get("xuc_xac_2",0),h.get("xuc_xac_3",0)])
     avg_sum = sum(faces)/len(faces) if faces else 10
     avg_sum_score = 1 if avg_sum > 10 else -1
 
-    # 4️⃣ Xác suất mặt xúc xắc
     face_counter = Counter(faces)
     low_faces = face_counter[1] + face_counter[2]
     high_faces = face_counter[5] + face_counter[6]
     face_score = 1 if high_faces > low_faces else -1
 
-    # 5️⃣ Trọng số
     final_score = streak_score*0.4 + winrate_score*0.3 + avg_sum_score*0.2 + face_score*0.1
     choice = "Tài" if final_score > 0 else "Xỉu"
 
     return f"🤖 AL chọn cầu: {choice} (Streak:{streak_score} | Winrate:{winrate_score:.2f} | AvgSum:{avg_sum_score} | Face:{face_score})"
 
 # ===== BUILD MESSAGE =====
-def build_msg(phien, ketqua, tong, x1,x2,x3):
+def build_msg(phien, ketqua, tong, x1, x2, x3):
     t=datetime.now().strftime("%H:%M:%S")
     trend=analyze_trend()
     wr=winrate()
@@ -213,30 +212,31 @@ async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg=f"Phiên trước: {last['phien']}\nKết quả: {last['ket_qua']}"
     await update.message.reply_text(msg)
 
-# ===== AUTO GỬI =====
-async def auto_check(app):
+# ===== AUTO GỬI JOB =====
+async def auto_check_job(context):
     global last_phien
-    while True:
-        await asyncio.sleep(CHECK_INTERVAL)
-        phien, ketqua, x1, x2, x3, tong = get_data()
-        if not phien or phien==last_phien:
-            continue
-        last_phien=phien
-        save(phien, ketqua, x1,x2,x3,tong)
-        try:
-            await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua, tong, x1,x2,x3))
-            print(f"[✅] {phien} ({ketqua}) gửi thành công")
-        except Exception as e:
-            print(f"[❌] Lỗi gửi {phien}: {e}")
+    phien, ketqua, x1, x2, x3, tong = get_data()
+    if not phien or phien == last_phien:
+        return
+    last_phien = phien
+    save(phien, ketqua, x1, x2, x3, tong)
+    try:
+        await context.bot.send_message(GROUP_ID, build_msg(phien, ketqua, tong, x1, x2, x3))
+        print(f"[✅] {phien} ({ketqua}) gửi thành công")
+    except Exception as e:
+        print(f"[❌] Lỗi gửi {phien}: {e}")
 
 # ===== CHẠY BOT =====
 async def main():
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
     app.add_handler(CommandHandler("prev", prev))
-    asyncio.create_task(auto_check(app))
+
+    app.job_queue.run_repeating(auto_check_job, interval=CHECK_INTERVAL, first=0)
+
     await app.run_polling()
 
 if __name__=="__main__":
