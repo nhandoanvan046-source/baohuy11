@@ -1,96 +1,102 @@
-import asyncio
-import aiohttp
-import logging
+import asyncio, requests, json
 from datetime import datetime
-from telegram import Bot
+from collections import deque
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from keep_alive import keep_alive
 
-# ---------------- CẤU HÌNH ----------------
+# ===== CẤU HÌNH =====
 BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"
-CHAT_ID = -1002666964512
+GROUP_ID = -1002666964512
 API_URL = "https://sunwinsaygex.onrender.com/api/taixiu/sunwin"
-CHECK_INTERVAL = 8  # giây giữa mỗi lần kiểm tra
-MAX_RETRY = 5       # số lần thử reconnect Telegram
-# -------------------------------------------
+AUTO_DELAY = 60  # 1 phút
+HISTORY_FILE = "history.json"
+TREND_LEN = 10
+ALERT_STREAK = 5
+ALERT_SPECIAL = 3
+WINRATE_THRESHOLD = 70
+# ===================
 
-logging.basicConfig(
-    format="%(asctime)s - [%(levelname)s] %(message)s",
-    level=logging.INFO
-)
+# ===== LOAD HISTORY =====
+try: history_all = json.load(open(HISTORY_FILE, "r", encoding="utf-8"))
+except: history_all = []
+history_trend = deque([r["ketqua"] for r in history_all[-TREND_LEN:]], maxlen=TREND_LEN)
 
-bot = Bot(token=BOT_TOKEN)
-last_phien = None  # Lưu phiên cuối cùng đã gửi
-
-# ---------------- KEEP ALIVE ----------------
-keep_alive()
-# --------------------------------------------
-
-async def fetch_data():
-    """Lấy dữ liệu từ API"""
+# ===== HÀM HỖ TRỢ =====
+def get_data():
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(API_URL, timeout=10) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-                else:
-                    logging.warning(f"⚠️ API lỗi: {resp.status}")
-                    return None
-    except Exception as e:
-        logging.error(f"❌ Lỗi khi fetch API: {e}")
-        return None
+        r = requests.get(API_URL, timeout=10); r.raise_for_status(); d=r.json()
+        return d.get("phien","Không rõ"), d.get("ketqua","Không rõ")
+    except: return None,None
 
-async def send_message_safe(text):
-    """Gửi tin nhắn Telegram, tự reconnect khi lỗi"""
-    for i in range(MAX_RETRY):
-        try:
-            await bot.send_message(chat_id=CHAT_ID, text=text, parse_mode="HTML")
-            return True
-        except Exception as e:
-            logging.warning(f"⚠️ Gửi thất bại ({i+1}/{MAX_RETRY}): {e}")
-            await asyncio.sleep(5)
-    logging.error("❌ Không thể gửi tin nhắn sau nhiều lần thử!")
-    return False
+def save(phien, ketqua):
+    record = {"phien":phien,"ketqua":ketqua,"time":datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    history_all.append(record); history_trend.append(ketqua)
+    with open(HISTORY_FILE,"w",encoding="utf-8") as f: json.dump(history_all,f,ensure_ascii=False,indent=2)
 
-async def auto_send_result():
-    """Tự động gửi kết quả khi API có phiên mới"""
-    global last_phien
+def analyze_trend(): tai=history_trend.count("Tài"); xiu=history_trend.count("Xỉu")
+    if len(history_trend)<3: return "📊 Chưa đủ dữ liệu"
+    if tai==xiu: return "⚖️ Xu hướng cân bằng!"
+    return f"🔥 Tài {tai}/{len(history_trend)}" if tai>xiu else f"💧 Xỉu {xiu}/{len(history_trend)}"
 
+def winrate(): tai=sum(1 for r in history_all if r["ketqua"]=="Tài"); xiu=sum(1 for r in history_all if r["ketqua"]=="Xỉu"); total=len(history_all)
+    if total==0: return "📊 Chưa có dữ liệu"
+    bar=lambda n,total: "█"*int(n/total*20)+"░"*(20-int(n/total*20))
+    return f"🏆 Tài {tai}/{total} {bar(tai,total)}\n🏆 Xỉu {xiu}/{total} {bar(xiu,total)}"
+
+def check_alert(): last=list(history_trend)[-ALERT_STREAK:]
+    if len(last)<ALERT_STREAK: return None
+    if all(r=="Tài" for r in last): return "🔥 5 phiên Tài liên tiếp!"
+    if all(r=="Xỉu" for r in last): return "💧 5 phiên Xỉu liên tiếp!"
+    return None
+
+def check_special(): last=list(history_trend)[-ALERT_SPECIAL:]
+    if len(last)<ALERT_SPECIAL: return None
+    tai=sum(1 for r in history_all if r["ketqua"]=="Tài"); xiu=sum(1 for r in history_all if r["ketqua"]=="Xỉu"); total=len(history_all)
+    if all(r=="Tài" for r in last) and tai/total*100>=WINRATE_THRESHOLD: return "🔥⚠️ 3 Tài liên tiếp + Winrate >70%!"
+    if all(r=="Xỉu" for r in last) and xiu/total*100>=WINRATE_THRESHOLD: return "💧⚠️ 3 Xỉu liên tiếp + Winrate >70%!"
+    return None
+
+def build_msg(phien, ketqua):
+    du_doan="Tài" if ketqua=="Tài" else "Xỉu"; t=datetime.now().strftime("%H:%M:%S")
+    trend=analyze_trend(); wr=winrate(); alert=check_alert(); sp=check_special()
+    msg=f"🌞 Sunwin TX\n🕐 {t}\n🧩 Phiên: {phien}\n🎯 Dự đoán: {du_doan}\n🏁 Kết quả: {ketqua}\n\n{trend}\n{wr}"
+    if alert: msg+=f"\n\n⚠️ {alert}"
+    if sp: msg+=f"\n\n{sp}"
+    return msg
+
+# ===== LỆNH BOT =====
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE): await update.message.reply_text(
+    "🌞 Sunwin TX Bot (AI + Alert)\n• /taixiu → Xem kết quả + xu hướng + winrate\n• Bot auto gửi mỗi phút 🤖", parse_mode="Markdown")
+
+async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    phien, ketqua=get_data()
+    if not phien: await update.message.reply_text("⚠️ Không thể lấy dữ liệu"); return
+    save(phien, ketqua)
+    await update.message.reply_text(build_msg(phien, ketqua), parse_mode="Markdown")
+
+# ===== AUTO GỬI =====
+async def auto_send(app):
+    last_phien=None
     while True:
-        data = await fetch_data()
-        if data:
-            try:
-                phien = data.get("phien")
-                du_doan = data.get("du_doan", "Không rõ")
-                ket_qua = data.get("ket_qua", "Chưa có")
+        await asyncio.sleep(AUTO_DELAY)
+        phien, ketqua=get_data()
+        if not phien or phien==last_phien: continue
+        last_phien=phien; save(phien, ketqua)
+        try: await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua), parse_mode="Markdown"); print(f"[✅] {phien} ({ketqua})")
+        except Exception as e: print(f"[❌] {e}")
 
-                # Nếu có phiên mới → gửi tin
-                if phien and phien != last_phien:
-                    last_phien = phien
-                    text = (
-                        f"🌞 <b>Sunwin TX</b>\n"
-                        f"🎯 <b>Phiên:</b> <code>{phien}</code>\n"
-                        f"🧠 <b>Dự đoán:</b> <b>{du_doan}</b>\n"
-                        f"🏁 <b>Kết quả:</b> <b>{ket_qua}</b>\n"
-                        f"⏰ <i>{datetime.now().strftime('%H:%M:%S %d/%m/%Y')}</i>"
-                    )
-                    await send_message_safe(text)
-                    logging.info(f"✅ Đã gửi kết quả phiên {phien}")
-            except Exception as e:
-                logging.error(f"❌ Lỗi xử lý dữ liệu API: {e}")
-
-        await asyncio.sleep(CHECK_INTERVAL)
-
+# ===== MAIN =====
 async def main():
-    """Chạy bot chính — auto reconnect nếu có lỗi"""
-    while True:
-        try:
-            logging.info("🚀 Bot Sunwin TX đang khởi động...")
-            await auto_send_result()
-        except Exception as e:
-            logging.error(f"💥 Lỗi chính: {e}")
-            logging.info("🔁 Đang thử kết nối lại sau 10s...")
-            await asyncio.sleep(10)
+    print("🚀 Khởi động bot Sunwin TX AI + Alert...")
+    keep_alive()
+    app=ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("taixiu", taixiu))
+    asyncio.create_task(auto_send(app))
+    await app.run_polling()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__=="__main__":
+    try: asyncio.run(main())
+    except KeyboardInterrupt: print("🛑 Bot dừng thủ công")
     
