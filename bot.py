@@ -1,122 +1,105 @@
 import asyncio
-import requests
-from datetime import datetime
+import json
+import aiohttp
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from keep_alive import keep_alive
 
-# ==== CẤU HÌNH ====
-BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"
-GROUP_ID = -1002666964512  # ID nhóm Telegram
+# Đọc cấu hình
+with open("config.json", "r") as f:
+    config = json.load(f)
+
+BOT_TOKEN = config["BOT_TOKEN"]
+CHAT_ID = config["CHAT_ID"]
 API_URL = "https://sunwinsaygex.onrender.com/api/taixiu/sunwin"
-AUTO_DELAY = 60  # Thời gian auto gửi (giây)
-# ===================
 
+last_phien = None  # Lưu phiên đã gửi để tránh spam
 
-# ===== LẤY DỮ LIỆU API =====
-def get_taixiu_data():
-    """Lấy dữ liệu tài xỉu từ API"""
-    try:
-        res = requests.get(API_URL, timeout=10)
-        res.raise_for_status()
-        data = res.json()
-        phien = data.get("phien", "Không rõ")
-        ketqua = data.get("ketqua", "Không rõ")
-        return phien, ketqua
-    except Exception as e:
-        print(f"[❌ LỖI API] {e}")
-        return None, None
-
-
-# ===== /start =====
+# --- Lệnh /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = (
-        "🌞 **Sunwin TX Bot**\n\n"
-        "🎯 Lệnh có sẵn:\n"
-        "• `/taixiu` → Xem kết quả mới nhất\n"
-        "• Bot sẽ tự gửi kết quả vào nhóm mỗi 1 phút 🕐"
-    )
-    await update.message.reply_text(msg, parse_mode="Markdown")
+    await update.message.reply_text("🌞 Bot Sunwin TX đang hoạt động!\nGõ /tx để xem kết quả Tài Xỉu mới nhất 🎲")
 
+# --- Lệnh /tx ---
+async def tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg_wait = await update.message.reply_text("⏳ Đang lấy dữ liệu từ Sunwin...")
 
-# ===== /taixiu =====
-async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    phien, ketqua = get_taixiu_data()
-    if not phien:
-        await update.message.reply_text("⚠️ Không thể lấy dữ liệu từ máy chủ.")
-        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(API_URL) as resp:
+                if resp.status != 200:
+                    await msg_wait.edit_text("❌ Không thể kết nối API Sunwin.")
+                    return
+                data = await resp.json()
 
-    du_doan = "Tài" if ketqua == "Tài" else "Xỉu"
-    time_now = datetime.now().strftime("%H:%M:%S")
+        phien = data.get("phien", "N/A")
+        du_doan = data.get("du_doan", "Không có")
+        ketqua = data.get("ketqua", "Không có")
 
-    msg = (
-        f"🌞 **Sunwin TX**\n"
-        f"🕐 **Thời gian:** {time_now}\n"
-        f"🧩 **Phiên:** {phien}\n"
-        f"🎯 **Dự đoán:** {du_doan}\n"
-        f"🏁 **Kết quả:** {ketqua}"
-    )
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-    # Gửi thêm tin auto sau 1 phút (tự động update)
-    await asyncio.sleep(60)
-    phien, ketqua = get_taixiu_data()
-    if phien:
-        auto_msg = (
-            f"⏰ Cập nhật mới!\n"
-            f"🧩 Phiên: {phien}\n"
+        text = (
+            f"🌞 Sunwin TX\n"
+            f"🎯 Phiên: {phien}\n"
+            f"🧠 Dự đoán: {du_doan}\n"
             f"🏁 Kết quả: {ketqua}"
         )
-        await update.message.reply_text(auto_msg, parse_mode="Markdown")
 
+        await msg_wait.edit_text(text)
 
-# ===== GỬI AUTO MỖI 1 PHÚT =====
+    except Exception as e:
+        await msg_wait.edit_text(f"⚠️ Lỗi: {e}")
+
+# --- Hàm lấy dữ liệu từ API ---
+async def get_taixiu():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(API_URL) as resp:
+            if resp.status != 200:
+                return None
+            return await resp.json()
+
+# --- Auto gửi kết quả mỗi phút ---
 async def auto_send(app):
-    last_phien = None
+    global last_phien
     while True:
-        await asyncio.sleep(AUTO_DELAY)
-        phien, ketqua = get_taixiu_data()
-        if not phien or phien == last_phien:
-            continue
-        last_phien = phien
-
-        du_doan = "Tài" if ketqua == "Tài" else "Xỉu"
-        time_now = datetime.now().strftime("%H:%M:%S")
-
-        msg = (
-            f"🌞 **Sunwin TX**\n"
-            f"🕐 **{time_now}**\n"
-            f"🧩 **Phiên:** {phien}\n"
-            f"🎯 **Dự đoán:** {du_doan}\n"
-            f"🏁 **Kết quả:** {ketqua}\n\n"
-            "⚙️ Bot auto cập nhật mỗi 1 phút!"
-        )
         try:
-            await app.bot.send_message(chat_id=GROUP_ID, text=msg, parse_mode="Markdown")
-            print(f"[✅ AUTO] Gửi phiên {phien} ({ketqua}) lúc {time_now}")
+            data = await get_taixiu()
+            if not data:
+                print("❌ Không lấy được dữ liệu API.")
+                await asyncio.sleep(60)
+                continue
+
+            phien = data.get("phien")
+            du_doan = data.get("du_doan", "Không có")
+            ketqua = data.get("ketqua", "Không có")
+
+            if phien != last_phien:
+                text = (
+                    f"🌞 Sunwin TX\n"
+                    f"🎯 Phiên: {phien}\n"
+                    f"🧠 Dự đoán: {du_doan}\n"
+                    f"🏁 Kết quả: {ketqua}"
+                )
+                await app.bot.send_message(chat_id=CHAT_ID, text=text)
+                last_phien = phien
+                print(f"✅ Gửi kết quả mới - Phiên {phien}")
+
+            await asyncio.sleep(60)  # 1 phút
+
         except Exception as e:
-            print(f"[❌ LỖI GỬI AUTO] {e}")
+            print(f"⚠️ Lỗi auto_send: {e}")
+            await asyncio.sleep(60)
 
-
-# ===== CHẠY BOT =====
+# --- Main ---
 async def main():
-    print("🚀 Đang khởi động bot Sunwin TX...")
-    keep_alive()
-
+    keep_alive()  # Duy trì Render online
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("taixiu", taixiu))
+    app.add_handler(CommandHandler("tx", tx))
 
-    # Tạo task chạy song song auto
+    # Task auto gửi
     asyncio.create_task(auto_send(app))
 
-    print("✅ Bot Sunwin TX đã sẵn sàng hoạt động!")
+    print("✅ Bot Sunwin TX đang chạy và auto gửi kết quả mỗi phút...")
     await app.run_polling()
 
-
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n🛑 Bot đã dừng thủ công.")
+    asyncio.run(main())
