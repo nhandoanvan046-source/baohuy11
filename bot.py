@@ -59,7 +59,6 @@ def save(phien, ketqua, x1, x2, x3, tong):
     }
     history_all.append(record)
     history_trend.append(ketqua)
-    # Giới hạn history_all tránh file quá lớn
     if len(history_all) > 1000:
         history_all.pop(0)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
@@ -125,7 +124,7 @@ def analyze_cau(min_len=3, max_len=18):
         return "Không có chuỗi đặc biệt 3–18 phiên gần nhất"
     return "Cầu phân tích:\n" + "\n".join(results)
 
-# ===== MINI-BOARD XÚC XẮC =====
+# ===== MINI-BOARD =====
 def dice_mini_board(x1, x2, x3):
     return f"🎲 {x1:02d} | {x2:02d} | {x3:02d} → Tổng: {x1+x2+x3}"
 
@@ -133,33 +132,27 @@ def dice_mini_board(x1, x2, x3):
 def ai_select_cau_advanced(last_n=3, face_n=10):
     if len(history_trend) < last_n:
         return "Chưa đủ dữ liệu dự đoán cầu"
-
     recent = list(history_trend)[-last_n:]
     streak_score = 0
     if all(r=="Tài" for r in recent):
         streak_score = -1
     elif all(r=="Xỉu" for r in recent):
         streak_score = 1
-
     tai_count = sum(1 for r in history_all if r["ket_qua"]=="Tài")
     xiu_count = sum(1 for r in history_all if r["ket_qua"]=="Xỉu")
     total = len(history_all)
     winrate_score = (xiu_count - tai_count)/total if total else 0
-
     faces = []
     for h in history_all[-face_n:]:
-        faces.extend([h.get("xuc_xac_1",0),h.get("xuc_xac_2",0),h.get("xuc_xac_3",0)])
+        faces.extend([h.get("xuc_xac_1",0), h.get("xuc_xac_2",0), h.get("xuc_xac_3",0)])
     avg_sum = sum(faces)/len(faces) if faces else 10
     avg_sum_score = 1 if avg_sum > 10 else -1
-
     face_counter = Counter(faces)
     low_faces = face_counter[1] + face_counter[2]
     high_faces = face_counter[5] + face_counter[6]
     face_score = 1 if high_faces > low_faces else -1
-
     final_score = streak_score*0.4 + winrate_score*0.3 + avg_sum_score*0.2 + face_score*0.1
     choice = "Tài" if final_score > 0 else "Xỉu"
-
     return f"🤖 AL chọn cầu: {choice} (Streak:{streak_score} | Winrate:{winrate_score:.2f} | AvgSum:{avg_sum_score} | Face:{face_score})"
 
 # ===== BUILD MESSAGE =====
@@ -201,8 +194,8 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not phien:
         await update.message.reply_text("⚠️ Không thể lấy dữ liệu")
         return
-    save(phien, ketqua, x1,x2,x3,tong)
-    await update.message.reply_text(build_msg(phien, ketqua, tong, x1,x2,x3))
+    save(phien, ketqua, x1, x2, x3, tong)
+    await update.message.reply_text(build_msg(phien, ketqua, tong, x1, x2, x3))
 
 async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(history_all)<2:
@@ -212,34 +205,33 @@ async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg=f"Phiên trước: {last['phien']}\nKết quả: {last['ket_qua']}"
     await update.message.reply_text(msg)
 
-# ===== AUTO GỬI JOB =====
-async def auto_check_job(context):
+# ===== AUTO CHECK =====
+async def auto_check_loop(app):
     global last_phien
-    phien, ketqua, x1, x2, x3, tong = get_data()
-    if not phien or phien == last_phien:
-        return
-    last_phien = phien
-    save(phien, ketqua, x1, x2, x3, tong)
-    try:
-        await context.bot.send_message(GROUP_ID, build_msg(phien, ketqua, tong, x1, x2, x3))
-        print(f"[✅] {phien} ({ketqua}) gửi thành công")
-    except Exception as e:
-        print(f"[❌] Lỗi gửi {phien}: {e}")
+    while True:
+        await asyncio.sleep(CHECK_INTERVAL)
+        phien, ketqua, x1, x2, x3, tong = get_data()
+        if not phien or phien == last_phien:
+            continue
+        last_phien = phien
+        save(phien, ketqua, x1, x2, x3, tong)
+        try:
+            await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua, tong, x1, x2, x3))
+            print(f"[✅] {phien} ({ketqua}) gửi thành công")
+        except Exception as e:
+            print(f"[❌] Lỗi gửi {phien}: {e}")
 
-# ===== CHẠY BOT =====
+# ===== RUN BOT =====
 async def main():
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
     app.add_handler(CommandHandler("prev", prev))
-
-    app.job_queue.run_repeating(auto_check_job, interval=CHECK_INTERVAL, first=0)
-
+    asyncio.create_task(auto_check_loop(app))  # auto gửi
     await app.run_polling()
 
 if __name__=="__main__":
     nest_asyncio.apply()
     asyncio.run(main())
-    
+        
