@@ -14,7 +14,8 @@ TREND_LEN = 10
 ALERT_STREAK = 5
 ALERT_SPECIAL = 3
 WINRATE_THRESHOLD = 70
-CHECK_INTERVAL = 5  # giây kiểm tra phiên mới
+CHECK_INTERVAL = 5       # giây kiểm tra phiên mới
+RESET_INTERVAL = 12*3600 # 12 giờ tự reset
 USE_MINIBOARD = True
 # ===================
 
@@ -43,8 +44,7 @@ def get_data():
             d.get("xuc_xac_3"),
             d.get("tong"),
         )
-    except Exception as e:
-        print(f"[⚠️] Lỗi get_data: {e}")
+    except:
         return None, None, None, None, None, None
 
 def save(phien, ketqua, x1, x2, x3, tong):
@@ -59,8 +59,6 @@ def save(phien, ketqua, x1, x2, x3, tong):
     }
     history_all.append(record)
     history_trend.append(ketqua)
-    if len(history_all) > 1000:
-        history_all.pop(0)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history_all, f, ensure_ascii=False, indent=2)
 
@@ -124,39 +122,81 @@ def analyze_cau(min_len=3, max_len=18):
         return "Không có chuỗi đặc biệt 3–18 phiên gần nhất"
     return "Cầu phân tích:\n" + "\n".join(results)
 
-# ===== MINI-BOARD =====
-def dice_mini_board(x1, x2, x3):
-    return f"🎲 {x1:02d} | {x2:02d} | {x3:02d} → Tổng: {x1+x2+x3}"
+# ===== MINI-BOARD XÚC XẮC =====
+def dice_mini_board(x1,x2,x3):
+    return f"🎲 {x1} | {x2} | {x3} → Tổng: {x1+x2+x3}"
 
-# ===== AI CHỌN CẦU =====
-def ai_select_cau_advanced(last_n=3, face_n=10):
-    if len(history_trend) < last_n:
-        return "Chưa đủ dữ liệu dự đoán cầu"
+# ===== TRỌNG SỐ ĐỘNG =====
+def dynamic_weights():
+    last_n = min(len(history_trend), 10)
     recent = list(history_trend)[-last_n:]
-    streak_score = 0
-    if all(r=="Tài" for r in recent):
-        streak_score = -1
-    elif all(r=="Xỉu" for r in recent):
-        streak_score = 1
-    tai_count = sum(1 for r in history_all if r["ket_qua"]=="Tài")
-    xiu_count = sum(1 for r in history_all if r["ket_qua"]=="Xỉu")
-    total = len(history_all)
-    winrate_score = (xiu_count - tai_count)/total if total else 0
-    faces = []
-    for h in history_all[-face_n:]:
-        faces.extend([h.get("xuc_xac_1",0), h.get("xuc_xac_2",0), h.get("xuc_xac_3",0)])
-    avg_sum = sum(faces)/len(faces) if faces else 10
-    avg_sum_score = 1 if avg_sum > 10 else -1
-    face_counter = Counter(faces)
-    low_faces = face_counter[1] + face_counter[2]
-    high_faces = face_counter[5] + face_counter[6]
-    face_score = 1 if high_faces > low_faces else -1
-    final_score = streak_score*0.4 + winrate_score*0.3 + avg_sum_score*0.2 + face_score*0.1
-    choice = "Tài" if final_score > 0 else "Xỉu"
-    return f"🤖 AL chọn cầu: {choice} (Streak:{streak_score} | Winrate:{winrate_score:.2f} | AvgSum:{avg_sum_score} | Face:{face_score})"
+    
+    streak_len = 1
+    for i in range(2, last_n+1):
+        if recent[-i] == recent[-i+1]:
+            streak_len += 1
+        else:
+            break
+    
+    streak_w = max(0.2, 0.5 - 0.05*streak_len)
+    winrate_w = min(0.5, 0.3 + 0.05*streak_len)
+    avg_sum_w = 0.2
+    face_w = 0.1
+    
+    return streak_w, winrate_w, avg_sum_w, face_w
+
+# ===== AI DỰ ĐOÁN 3 PHIÊN NÂNG CAO =====
+def ai_predict_next_n_advanced(n=3, last_n=5, face_n=10):
+    if len(history_trend) < last_n or not history_all:
+        return ["Chưa đủ dữ liệu dự đoán cầu"]
+
+    predictions = []
+    trend_copy = list(history_trend)
+    
+    for i in range(n):
+        recent = trend_copy[-last_n:]
+        streak_score = sum((1 if r=="Tài" else -1)/ (j+1) for j,r in enumerate(recent[::-1]))
+        
+        tai_count = sum(1 for r in history_all if r["ket_qua"]=="Tài")
+        xiu_count = sum(1 for r in history_all if r["ket_qua"]=="Xỉu")
+        total = len(history_all)
+        winrate_score = (tai_count - xiu_count)/total if total else 0
+
+        faces=[]
+        for h in history_all[-face_n:]:
+            faces.extend([
+                int(h.get("xuc_xac_1",0)),
+                int(h.get("xuc_xac_2",0)),
+                int(h.get("xuc_xac_3",0))
+            ])
+        if faces:
+            avg_sum = sum(faces)/len(faces)
+            avg_sum_score = 1 if avg_sum>10 else -1
+            low_faces = faces.count(1)+faces.count(2)
+            high_faces = faces.count(5)+faces.count(6)
+            face_score = 1 if high_faces > low_faces else -1
+        else:
+            avg_sum_score = 0
+            face_score = 0
+
+        streak_w, winrate_w, avg_sum_w, face_w = dynamic_weights()
+        final_score = streak_score*streak_w + winrate_score*winrate_w + avg_sum_score*avg_sum_w + face_score*face_w
+        
+        recent_n = min(10, len(history_trend))
+        tai_recent = list(history_trend)[-recent_n:].count("Tài")
+        xiu_recent = recent_n - tai_recent
+        prob_base = abs(final_score)*50 + 50
+        prob_adjust = (tai_recent - xiu_recent)/recent_n * 10
+        prob = min(max(prob_base + prob_adjust, 50), 95)
+        
+        choice = "Tài" if final_score > 0 else "Xỉu"
+        predictions.append(f"Phiên +{i+1}: {choice} ({prob:.0f}%)")
+        trend_copy.append(choice)
+
+    return predictions
 
 # ===== BUILD MESSAGE =====
-def build_msg(phien, ketqua, tong, x1, x2, x3):
+def build_msg(phien, ketqua, tong, x1,x2,x3):
     t=datetime.now().strftime("%H:%M:%S")
     trend=analyze_trend()
     wr=winrate()
@@ -164,7 +204,7 @@ def build_msg(phien, ketqua, tong, x1, x2, x3):
     sp=check_special()
     predict=predict_next()
     cau_analysis=analyze_cau(3,18)
-    predict_ai=ai_select_cau_advanced(3,10)
+    predict_ai_multi="\n".join(ai_predict_next_n_advanced(3, last_n=5, face_n=10))
     prev="Chưa có"
     if len(history_all)>=2:
         last=history_all[-2]
@@ -177,7 +217,7 @@ def build_msg(phien, ketqua, tong, x1, x2, x3):
         f"Xúc xắc: {dice_display}\n"
         f"Kết quả: {ketqua}\n"
         f"Phiên trước: {prev}\n\n"
-        f"{trend}\n{wr}\n{predict}\n{predict_ai}\n{cau_analysis}"
+        f"{trend}\n{wr}\n{predict}\n{predict_ai_multi}\n{cau_analysis}"
     )
     if alert: msg+=f"\n{alert}"
     if sp: msg+=f"\n{sp}"
@@ -194,8 +234,8 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not phien:
         await update.message.reply_text("⚠️ Không thể lấy dữ liệu")
         return
-    save(phien, ketqua, x1, x2, x3, tong)
-    await update.message.reply_text(build_msg(phien, ketqua, tong, x1, x2, x3))
+    save(phien, ketqua, x1,x2,x3,tong)
+    await update.message.reply_text(build_msg(phien, ketqua, tong, x1,x2,x3))
 
 async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(history_all)<2:
@@ -205,33 +245,50 @@ async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg=f"Phiên trước: {last['phien']}\nKết quả: {last['ket_qua']}"
     await update.message.reply_text(msg)
 
-# ===== AUTO CHECK =====
-async def auto_check_loop(app):
+# ===== AUTO GỬI =====
+async def auto_check(app):
     global last_phien
     while True:
         await asyncio.sleep(CHECK_INTERVAL)
         phien, ketqua, x1, x2, x3, tong = get_data()
-        if not phien or phien == last_phien:
+        if not phien or phien==last_phien:
             continue
-        last_phien = phien
-        save(phien, ketqua, x1, x2, x3, tong)
+        last_phien=phien
+        save(phien, ketqua, x1,x2,x3,tong)
         try:
-            await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua, tong, x1, x2, x3))
+            await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua, tong, x1,x2,x3))
             print(f"[✅] {phien} ({ketqua}) gửi thành công")
         except Exception as e:
             print(f"[❌] Lỗi gửi {phien}: {e}")
 
-# ===== RUN BOT =====
+# ===== AUTO RESET 12H =====
+async def auto_reset():
+    global history_all, history_trend, last_phien
+    while True:
+        await asyncio.sleep(RESET_INTERVAL)
+        history_all.clear()
+        history_trend.clear()
+        last_phien=None
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+        print("[♻️] Auto reset dữ liệu 12h thành công")
+
+# ===== CHẠY BOT =====
 async def main():
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
     app.add_handler(CommandHandler("prev", prev))
-    asyncio.create_task(auto_check_loop(app))  # auto gửi
-    await app.run_polling()
 
-if __name__=="__main__":
-    nest_asyncio.apply()
-    asyncio.run(main())
+    asyncio.create_task(auto_check(app))
+    asyncio.create_task(auto_reset())
+
+    await app.start()
+    await app.updater.start_polling()
+    print("[🚀] Bot chạy thành công")
+    await app.idle()
+
+nest_asyncio.apply()
+asyncio.run(main())
         
