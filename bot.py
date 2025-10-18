@@ -128,14 +128,13 @@ def auto_cau_alert():
         sub = trend[-length:]
         if all(x=="Tài" for x in sub):
             alerts.append(f"🔥 {length} Tài liên tiếp")
-        elif all(x=="Xỉu" for x in sub):
+        elif all(x=="Xỉu" for x in sub:
             alerts.append(f"💧 {length} Xỉu liên tiếp")
     if alerts: return " | ".join(alerts)
     return None
 
 # ===== PHÂN TÍCH CẦU XÍ NGẦU =====
 def analyze_dice_cau(n=10):
-    """Phân tích cầu viên 1-3 n phiên gần nhất"""
     res = []
     for i in range(1,4):
         line = []
@@ -160,9 +159,8 @@ async def build_msg(phien, ketqua):
     alert = check_alert()
     sp = check_special()
     cau_alert = auto_cau_alert()
-    dice_cau = analyze_dice_cau(10)  # 10 phiên gần nhất
+    dice_cau = analyze_dice_cau(10)
 
-    # Xúc xắc phiên hiện tại
     _, _, dice = await get_dice_data()
     x1,x2,x3,tong = dice
     dice_msg = f"[{x1} | {x2} | {x3}] → {tong}" if x1 else "Chưa có dữ liệu"
@@ -197,7 +195,6 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not phien:
         await update.message.reply_text("⚠️ Không thể lấy dữ liệu")
         return
-    # Lấy dice hiện tại
     _, _, dice = await get_dice_data()
     x1,x2,x3,_ = dice
     save(phien, ketqua, x1, x2, x3)
@@ -229,13 +226,15 @@ async def auto_check(app):
             print(f"[❌] Lỗi auto_check: {e}")
 
 # ===== CHẠY BOT =====
-if __name__=="__main__":
-    print("🚀 Khởi động bot Sunwin TX AI + Alert + Cầu 3–18 + Xúc xắc + Phân tích viên...")
+async def main():
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
     app.add_handler(CommandHandler("prev", prev))
-    app.create_task(auto_check(app))
-    app.run_polling()
-                                                  
+    asyncio.create_task(auto_check(app))
+    await app.run_polling()
+
+if __name__=="__main__":
+    asyncio.run(main())
+    
