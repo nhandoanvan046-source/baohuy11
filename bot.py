@@ -204,7 +204,7 @@ def build_msg(phien, ketqua, tong, x1,x2,x3):
     sp=check_special()
     predict=predict_next()
     cau_analysis=analyze_cau(3,18)
-    predict_ai_multi="\n".join(ai_predict_next_n_advanced(3, last_n=5, face_n=10))
+    predict_ai="\n".join(ai_predict_next_n_advanced(3))
     prev="Chưa có"
     if len(history_all)>=2:
         last=history_all[-2]
@@ -217,7 +217,7 @@ def build_msg(phien, ketqua, tong, x1,x2,x3):
         f"Xúc xắc: {dice_display}\n"
         f"Kết quả: {ketqua}\n"
         f"Phiên trước: {prev}\n\n"
-        f"{trend}\n{wr}\n{predict}\n{predict_ai_multi}\n{cau_analysis}"
+        f"{trend}\n{wr}\n{predict}\n{predict_ai}\n{cau_analysis}"
     )
     if alert: msg+=f"\n{alert}"
     if sp: msg+=f"\n{sp}"
@@ -266,12 +266,12 @@ async def auto_reset():
     global history_all, history_trend, last_phien
     while True:
         await asyncio.sleep(RESET_INTERVAL)
-        history_all.clear()
-        history_trend.clear()
+        history_all=[]
+        history_trend=deque(maxlen=TREND_LEN)
         last_phien=None
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump([], f, ensure_ascii=False, indent=2)
-        print("[♻️] Auto reset dữ liệu 12h thành công")
+        with open(HISTORY_FILE,"w",encoding="utf-8") as f:
+            f.write("[]")
+        print("[♻️] Đã reset lịch sử 12h")
 
 # ===== CHẠY BOT =====
 async def main():
@@ -284,11 +284,9 @@ async def main():
     asyncio.create_task(auto_check(app))
     asyncio.create_task(auto_reset())
 
-    await app.start()
-    await app.updater.start_polling()
-    print("[🚀] Bot chạy thành công")
-    await app.idle()
+    await app.run_polling()
 
-nest_asyncio.apply()
-asyncio.run(main())
+if __name__=="__main__":
+    nest_asyncio.apply()
+    asyncio.run(main())
         
