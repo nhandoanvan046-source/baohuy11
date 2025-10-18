@@ -81,6 +81,26 @@ def predict_next():
     if not count: return "📊 Chưa đủ dữ liệu"
     return "Dự đoán phiên tiếp theo: Tài" if count["Tài"]>count["Xỉu"] else "Dự đoán phiên tiếp theo: Xỉu"
 
+# ===== PHÂN TÍCH CẦU 3–18 =====
+def analyze_cau(min_len=3, max_len=18):
+    if len(history_trend) < min_len:
+        return "📊 Chưa đủ dữ liệu để phân tích cầu"
+
+    trend = list(history_trend)
+    results = []
+
+    for length in range(min_len, min(max_len+1, len(trend)+1)):
+        sub = trend[-length:]
+        if all(x=="Tài" for x in sub):
+            results.append(f"🔥 {length} Tài liên tiếp")
+        elif all(x=="Xỉu" for x in sub):
+            results.append(f"💧 {length} Xỉu liên tiếp")
+
+    if not results:
+        return "⚖️ Không có chuỗi Tài/Xỉu đặc biệt 3–18 phiên gần nhất"
+    return "\n".join(results)
+
+# ===== BUILD MESSAGE =====
 def build_msg(phien, ketqua):
     t = datetime.now().strftime("%H:%M:%S")
     trend = analyze_trend()
@@ -88,15 +108,16 @@ def build_msg(phien, ketqua):
     alert = check_alert()
     sp = check_special()
     predict = predict_next()
-    
+    cau_analysis = analyze_cau(3,18)
+
     # Phiên trước
     if len(history_all) >= 2:
         last = history_all[-2]
         prev = f"{last['ketqua']} (Phiên {last['phien']})"
     else:
         prev = "Chưa có"
-    
-    msg = f"🌞 Sunwin TX\n🕐 {t}\n🧩 Phiên: {phien}\n🎯 Kết quả: {ketqua}\n📜 Phiên trước: {prev}\n\n{trend}\n{wr}\n📌 {predict}"
+
+    msg = f"🌞 Sunwin TX\n🕐 {t}\n🧩 Phiên: {phien}\n🎯 Kết quả: {ketqua}\n📜 Phiên trước: {prev}\n\n{trend}\n{wr}\n📌 {predict}\n{cau_analysis}"
     if alert: msg += f"\n⚠️ {alert}"
     if sp: msg += f"\n⚠️ {sp}"
     return msg
@@ -104,7 +125,7 @@ def build_msg(phien, ketqua):
 # ===== LỆNH BOT =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌞 Sunwin TX Bot (AI + Alert)\n• /taixiu → Xem kết quả + xu hướng + winrate\n• Bot auto gửi theo phiên mới 🤖"
+        "🌞 Sunwin TX Bot (AI + Alert + Phân tích cầu)\n• /taixiu → Xem kết quả + xu hướng + winrate + cầu 3–18\n• Bot auto gửi theo phiên mới 🤖"
     )
 
 async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -114,6 +135,14 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     save(phien, ketqua)
     await update.message.reply_text(build_msg(phien, ketqua))
+
+async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(history_all) < 2:
+        await update.message.reply_text("📜 Chưa có phiên trước")
+        return
+    last = history_all[-2]
+    msg = f"📜 Phiên trước: {last['phien']}\n🎯 Kết quả: {last['ketqua']}"
+    await update.message.reply_text(msg)
 
 # ===== AUTO GỬI THEO PHIÊN =====
 async def auto_check(app):
@@ -133,13 +162,14 @@ async def auto_check(app):
 
 # ===== CHẠY BOT =====
 if __name__=="__main__":
-    print("🚀 Khởi động bot Sunwin TX AI + Alert...")
+    print("🚀 Khởi động bot Sunwin TX AI + Alert + Cầu 3–18...")
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
+    app.add_handler(CommandHandler("prev", prev))
 
     # Tạo task async auto gửi theo phiên
     asyncio.get_event_loop().create_task(auto_check(app))
     app.run_polling()
-        
+           
