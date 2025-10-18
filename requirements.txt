@@ -7,3 +7,4 @@ pyTelegramBotAPI
 fastapi
 uvicorn
 aiohttp
+nest_asyncio
