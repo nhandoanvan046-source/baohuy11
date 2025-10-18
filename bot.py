@@ -13,9 +13,9 @@ HISTORY_FILE = "history.json"
 TREND_LEN = 10
 ALERT_STREAK = 5
 ALERT_SPECIAL = 3
-WINRATE_THRESHOLD = 100
-CHECK_INTERVAL = 5  # giây kiểm tra phiên mới
-USE_MINIBOARD = False  # True → mini-board, False → chữ gọn
+WINRATE_THRESHOLD = 70
+CHECK_INTERVAL = 10  # giây
+USE_MINIBOARD = True
 # ===================
 
 # ===== LOAD HISTORY =====
@@ -32,7 +32,7 @@ last_phien = history_all[-1]["phien"] if history_all else None
 # ===== HỖ TRỢ API =====
 def get_data():
     try:
-        r = requests.get(API_URL, timeout=10)
+        r = requests.get(API_URL, timeout=15)
         r.raise_for_status()
         d = r.json()
         return (
@@ -43,11 +43,20 @@ def get_data():
             d.get("xuc_xac_3"),
             d.get("tong"),
         )
-    except:
+    except Exception as e:
+        print(f"[❌] Lỗi get_data: {e}")
         return None, None, None, None, None, None
 
-def save(phien, ketqua):
-    record = {"phien": phien, "ket_qua": ketqua, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+def save(phien, ketqua, x1=None, x2=None, x3=None, tong=None):
+    record = {
+        "phien": phien,
+        "ket_qua": ketqua,
+        "xuc_xac_1": x1,
+        "xuc_xac_2": x2,
+        "xuc_xac_3": x3,
+        "tong": tong,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
     history_all.append(record)
     history_trend.append(ketqua)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
@@ -92,35 +101,75 @@ def check_special():
         return "⚠️ 3 Xỉu liên tiếp + Winrate >70%!"
     return None
 
-def predict_next():
-    count = Counter(history_trend)
-    if not count:
-        return "Chưa đủ dữ liệu để dự đoán"
-    return "Dự đoán phiên tiếp theo: Tài" if count["Tài"] > count["Xỉu"] else "Dự đoán phiên tiếp theo: Xỉu"
-
-def analyze_cau(min_len=3, max_len=18):
-    if len(history_trend) < min_len:
-        return "Chưa đủ dữ liệu để phân tích cầu"
-
+def analyze_cau_advanced(min_len=3, max_len=18):
     trend = list(history_trend)
+    if len(trend) < min_len:
+        return "Chưa đủ dữ liệu để phân tích cầu"
+    
     results = []
-
-    for length in range(min_len, min(max_len + 1, len(trend) + 1)):
-        sub = trend[-length:]
-        if all(x == "Tài" for x in sub):
-            results.append(f"{length} Tài liên tiếp")
-        elif all(x == "Xỉu" for x in sub):
-            results.append(f"{length} Xỉu liên tiếp")
-
+    longest = {"Tài":0, "Xỉu":0}
+    
+    for i in range(len(trend)):
+        count = 1
+        for j in range(i+1, len(trend)):
+            if trend[j] == trend[i]:
+                count += 1
+            else:
+                break
+        if count >= min_len:
+            results.append(f"{count} {trend[i]} liên tiếp (phiên {i+1}-{i+count})")
+            if count > longest[trend[i]]:
+                longest[trend[i]] = count
+    
     if not results:
         return "Không có chuỗi đặc biệt 3–18 phiên gần nhất"
-    return "Cầu phân tích:\n" + "\n".join(results)
 
-# ===== HIỂN THỊ MINI-BOARD =====
-def mini_board(x1, x2, x3):
-    return f"""
-🎲 {x1} | {x2} | {x3} → Tổng: {x1+x2+x3}
-"""
+    alerts = []
+    for key, val in longest.items():
+        if val >= 5:
+            alerts.append(f"⚠️ Chuỗi dài {val} {key} liên tiếp!")
+    
+    return "Cầu phân tích:\n" + "\n".join(results + alerts)
+
+# ===== DỰ ĐOÁN XÍ NGẦU =====
+def predict_next_trend():
+    if not history_trend:
+        return "Chưa đủ dữ liệu để dự đoán"
+    last3 = list(history_trend)[-3:]
+    if all(r == "Tài" for r in last3):
+        return "Ước lượng: Xỉu có khả năng xuất hiện để cân bằng"
+    elif all(r == "Xỉu" for r in last3):
+        return "Ước lượng: Tài có khả năng xuất hiện để cân bằng"
+    else:
+        total = len(history_all)
+        tai_count = sum(1 for r in history_all if r["ket_qua"] == "Tài")
+        xiu_count = sum(1 for r in history_all if r["ket_qua"] == "Xỉu")
+        return f"Dự đoán thống kê: {'Tài' if tai_count>=xiu_count else 'Xỉu'} (Winrate: Tài {tai_count/total*100:.1f}% | Xỉu {xiu_count/total*100:.1f}%)"
+
+def dice_face_probability_advanced(last_n=10):
+    faces = []
+    for h in history_all[-last_n:]:
+        faces.extend([h.get("xuc_xac_1"), h.get("xuc_xac_2"), h.get("xuc_xac_3")])
+    counts = Counter(faces)
+    total = sum(counts.values())
+    if total == 0:
+        return "Chưa có dữ liệu mặt xúc xắc"
+    
+    max_count = max(counts.values())
+    most_likely = [face for face, count in counts.items() if count == max_count]
+    symbols = {1:'⚀',2:'⚁',3:'⚂',4:'⚃',5:'⚄',6:'⚅'}
+    
+    prob_str = f"Xác suất mặt xúc xắc ({last_n} phiên gần nhất):\n"
+    for face in range(1,7):
+        prob = counts.get(face,0)/total*100
+        mark = "🔥" if face in most_likely else ""
+        prob_str += f"{symbols[face]} {prob:.1f}% {mark}\n"
+    
+    return prob_str.strip()
+
+def dice_mini_board(x1,x2,x3):
+    symbols = {1:'⚀',2:'⚁',3:'⚂',4:'⚃',5:'⚄',6:'⚅'}
+    return f"{symbols.get(x1,'?')} {symbols.get(x2,'?')} {symbols.get(x3,'?')} → Tổng: {x1+x2+x3}"
 
 # ===== BUILD MESSAGE =====
 def build_msg(phien, ketqua, tong, x1, x2, x3):
@@ -129,15 +178,14 @@ def build_msg(phien, ketqua, tong, x1, x2, x3):
     wr = winrate()
     alert = check_alert()
     sp = check_special()
-    predict = predict_next()
-    cau_analysis = analyze_cau(3, 18)
-
+    predict = predict_next_trend()
+    cau_analysis = analyze_cau_advanced()
+    dice_stats = dice_face_probability_advanced(10)
     prev = "Chưa có"
     if len(history_all) >= 2:
         last = history_all[-2]
         prev = f"{last['ket_qua']} (Phiên {last['phien']})"
-
-    dice_display = mini_board(x1, x2, x3) if USE_MINIBOARD else f"{x1} | {x2} | {x3} → Tổng: {tong}"
+    dice_display = dice_mini_board(x1, x2, x3) if USE_MINIBOARD else f"{x1} | {x2} | {x3} → Tổng: {tong}"
 
     msg = (
         f"Sunwin TX 🎲\n"
@@ -146,7 +194,7 @@ def build_msg(phien, ketqua, tong, x1, x2, x3):
         f"Xúc xắc: {dice_display}\n"
         f"Kết quả: {ketqua}\n"
         f"Phiên trước: {prev}\n\n"
-        f"{trend}\n{wr}\n{predict}\n{cau_analysis}"
+        f"{trend}\n{wr}\n{predict}\n{cau_analysis}\n{dice_stats}"
     )
     if alert:
         msg += f"\n{alert}"
@@ -157,7 +205,7 @@ def build_msg(phien, ketqua, tong, x1, x2, x3):
 # ===== LỆNH BOT =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Sunwin TX Bot\n• /taixiu → Xem kết quả + xu hướng + winrate + cầu 3–18\nBot auto gửi theo phiên mới 🤖"
+        "Sunwin TX Bot\n• /taixiu → Xem kết quả + xu hướng + winrate + cầu 3–18 + dự đoán\nBot auto gửi theo phiên mới 🤖"
     )
 
 async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,7 +213,7 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not phien:
         await update.message.reply_text("⚠️ Không thể lấy dữ liệu")
         return
-    save(phien, ketqua)
+    save(phien, ketqua, x1, x2, x3, tong)
     await update.message.reply_text(build_msg(phien, ketqua, tong, x1, x2, x3))
 
 async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,7 +221,7 @@ async def prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Chưa có phiên trước")
         return
     last = history_all[-2]
-    msg = f"Phiên trước: {last['phien']}\nKết quả: {last['ket_qua']}"
+    msg = f"Phiên trước: {last['phien']}\nKết quả: {last['ket_qua']}\nXúc xắc: {last.get('xuc_xac_1')}|{last.get('xuc_xac_2')}|{last.get('xuc_xac_3')}"
     await update.message.reply_text(msg)
 
 # ===== AUTO GỬI THEO PHIÊN =====
@@ -185,7 +233,7 @@ async def auto_check(app):
         if not phien or phien == last_phien:
             continue
         last_phien = phien
-        save(phien, ketqua)
+        save(phien, ketqua, x1, x2, x3, tong)
         try:
             await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua, tong, x1, x2, x3))
             print(f"[✅] {phien} ({ketqua}) gửi thành công")
@@ -202,12 +250,10 @@ async def main():
 
     # Auto gửi theo phiên
     asyncio.create_task(auto_check(app))
-
     await app.run_polling()
 
 if __name__ == "__main__":
-    # Render: tránh asyncio.run gây lỗi "already running loop"
     loop = asyncio.get_event_loop()
     loop.create_task(main())
     loop.run_forever()
-        
+                      
