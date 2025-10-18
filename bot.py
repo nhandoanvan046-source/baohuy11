@@ -15,7 +15,7 @@ TREND_LEN = 10
 ALERT_STREAK = 5
 ALERT_SPECIAL = 3
 WINRATE_THRESHOLD = 70
-CHECK_INTERVAL = 5  # giây kiểm tra phiên mới
+CHECK_INTERVAL = 5
 # ===================
 
 # ===== LOAD HISTORY =====
@@ -29,29 +29,27 @@ history_trend = deque([r["ketqua"] for r in history_all[-TREND_LEN:]], maxlen=TR
 last_phien = history_all[-1]["phien"] if history_all else None
 
 # ===== HÀM HỖ TRỢ =====
-async def get_sunwin_data():
+async def fetch_json(url):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(SUNWIN_API, timeout=10) as resp:
-                d = await resp.json()
-                return d.get("phien"), d.get("ketqua")
+            async with session.get(url, timeout=10) as resp:
+                return await resp.json()
     except:
-        return None, None
+        return {}
+
+async def get_sunwin_data():
+    d = await fetch_json(SUNWIN_API)
+    return d.get("phien"), d.get("ketqua")
 
 async def get_dice_data():
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(DICE_API, timeout=10) as resp:
-                d = await resp.json()
-                phien = d.get("phien_hien_tai")
-                ketqua = d.get("ket_qua")
-                x1 = d.get("xuc_xac_1")
-                x2 = d.get("xuc_xac_2")
-                x3 = d.get("xuc_xac_3")
-                tong = d.get("tong")
-                return phien, ketqua, (x1, x2, x3, tong)
-    except:
-        return None, None, (None, None, None, None)
+    d = await fetch_json(DICE_API)
+    phien = d.get("phien_hien_tai")
+    ketqua = d.get("ket_qua")
+    x1 = d.get("xuc_xac_1")
+    x2 = d.get("xuc_xac_2")
+    x3 = d.get("xuc_xac_3")
+    tong = d.get("tong")
+    return phien, ketqua, (x1, x2, x3, tong)
 
 def save(phien, ketqua, x1=None, x2=None, x3=None):
     record = {
@@ -68,7 +66,7 @@ def save(phien, ketqua, x1=None, x2=None, x3=None):
     with open(HISTORY_FILE,"w",encoding="utf-8") as f:
         json.dump(history_all,f,ensure_ascii=False,indent=2)
 
-# ===== PHÂN TÍCH TÀI/XỈU =====
+# ===== PHÂN TÍCH =====
 def analyze_trend():
     tai = history_trend.count("Tài")
     xiu = history_trend.count("Xỉu")
@@ -120,20 +118,6 @@ def analyze_cau(min_len=3,max_len=18):
     if not results: return "⚖️ Không có chuỗi đặc biệt"
     return " | ".join(results)
 
-def auto_cau_alert():
-    trend = list(history_trend)
-    alerts = []
-    for length in range(18,2,-1):
-        if len(trend)<length: continue
-        sub = trend[-length:]
-        if all(x=="Tài" for x in sub):
-            alerts.append(f"🔥 {length} Tài liên tiếp")
-        elif all(x=="Xỉu" for x in sub:
-            alerts.append(f"💧 {length} Xỉu liên tiếp")
-    if alerts: return " | ".join(alerts)
-    return None
-
-# ===== PHÂN TÍCH CẦU XÍ NGẦU =====
 def analyze_dice_cau(n=10):
     res = []
     for i in range(1,4):
@@ -158,7 +142,6 @@ async def build_msg(phien, ketqua):
     cau = analyze_cau(3,18)
     alert = check_alert()
     sp = check_special()
-    cau_alert = auto_cau_alert()
     dice_cau = analyze_dice_cau(10)
 
     _, _, dice = await get_dice_data()
@@ -174,11 +157,10 @@ async def build_msg(phien, ketqua):
         f"🔥 Xu hướng: {trend}\n"
         f"🏆 Winrate: {wr}\n"
         f"📌 Dự đoán: {predict}\n"
-        f"⚖️ Cầu : {cau}"
+        f"⚖️ Cầu 3–18: {cau}"
     )
     if alert: msg += f"\n⚠️ Alert: {alert}"
     if sp: msg += f"\n⚠️ Special: {sp}"
-    if cau_alert: msg += f"\n📊 Cầu tự động: {cau_alert}"
     msg += f"\n🎲 Cầu viên 1–3 (10 phiên gần nhất):\n{dice_cau}"
     return msg
 
@@ -232,9 +214,13 @@ async def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
     app.add_handler(CommandHandler("prev", prev))
+
+    # Tạo task auto_check bên trong event loop
     asyncio.create_task(auto_check(app))
+
+    # Chạy bot
     await app.run_polling()
 
 if __name__=="__main__":
     asyncio.run(main())
-    
+                            
