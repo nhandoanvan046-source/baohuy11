@@ -1,8 +1,8 @@
-import asyncio, requests, json, os
+import requests, json, os
 from datetime import datetime
 from collections import deque, Counter
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, JobQueue
 from keep_alive import keep_alive
 
 # ===== CẤU HÌNH =====
@@ -25,6 +25,7 @@ with open(HISTORY_FILE, "r", encoding="utf-8") as f:
     history_all = json.load(f)
 
 history_trend = deque([r["ketqua"] for r in history_all[-TREND_LEN:]], maxlen=TREND_LEN)
+last_phien = history_all[-1]["phien"] if history_all else None
 
 # ===== HÀM HỖ TRỢ =====
 def get_data():
@@ -77,7 +78,6 @@ def check_special():
     return None
 
 def predict_next():
-    # Dự đoán phiên tiếp theo dựa trên tần suất 10 phiên gần nhất
     count = Counter(history_trend)
     if not count: return "📊 Chưa đủ dữ liệu"
     return "Dự đoán phiên tiếp theo: Tài" if count["Tài"]>count["Xỉu"] else "Dự đoán phiên tiếp theo: Xỉu"
@@ -111,20 +111,18 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(build_msg(phien, ketqua), parse_mode="Markdown")
 
 # ===== AUTO GỬI THEO PHIÊN =====
-async def auto_send_by_phien(app):
-    last_phien = history_all[-1]["phien"] if history_all else None
-    while True:
-        await asyncio.sleep(CHECK_INTERVAL)
-        phien, ketqua = get_data()
-        if not phien or phien == last_phien: 
-            continue
-        last_phien = phien
-        save(phien, ketqua)
-        try:
-            await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua), parse_mode="Markdown")
-            print(f"[✅] {phien} ({ketqua}) gửi thành công")
-        except Exception as e:
-            print(f"[❌] Lỗi gửi {phien}: {e}")
+async def job_check_phien(context: ContextTypes.DEFAULT_TYPE):
+    global last_phien
+    phien, ketqua = get_data()
+    if not phien or phien == last_phien: 
+        return
+    last_phien = phien
+    save(phien, ketqua)
+    try:
+        await context.bot.send_message(GROUP_ID, build_msg(phien, ketqua), parse_mode="Markdown")
+        print(f"[✅] {phien} ({ketqua}) gửi thành công")
+    except Exception as e:
+        print(f"[❌] Lỗi gửi {phien}: {e}")
 
 # ===== CHẠY BOT =====
 if __name__=="__main__":
@@ -134,10 +132,9 @@ if __name__=="__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
 
-    async def main():
-        # Tạo task auto gửi theo phiên mới
-        asyncio.create_task(auto_send_by_phien(app))
-        await app.run_polling()
+    # Tạo job queue auto kiểm tra phiên mới
+    jq = app.job_queue
+    jq.run_repeating(job_check_phien, interval=CHECK_INTERVAL, first=0)
 
-    asyncio.run(main())
+    app.run_polling()
     
