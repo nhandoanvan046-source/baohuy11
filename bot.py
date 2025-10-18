@@ -1,8 +1,8 @@
-import requests, json, os
+import asyncio, requests, json, os
 from datetime import datetime
 from collections import deque, Counter
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, JobQueue
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from keep_alive import keep_alive
 
 # ===== CẤU HÌNH =====
@@ -83,7 +83,6 @@ def predict_next():
     return "Dự đoán phiên tiếp theo: Tài" if count["Tài"]>count["Xỉu"] else "Dự đoán phiên tiếp theo: Xỉu"
 
 def build_msg(phien, ketqua):
-    du_doan = "Tài" if ketqua=="Tài" else "Xỉu"
     t = datetime.now().strftime("%H:%M:%S")
     trend = analyze_trend()
     wr = winrate()
@@ -98,8 +97,7 @@ def build_msg(phien, ketqua):
 # ===== LỆNH BOT =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌞 Sunwin TX Bot (AI + Alert)\n• /taixiu → Xem kết quả + xu hướng + winrate\n• Bot auto gửi theo phiên mới 🤖",
-        parse_mode="Markdown"
+        "🌞 Sunwin TX Bot (AI + Alert)\n• /taixiu → Xem kết quả + xu hướng + winrate\n• Bot auto gửi theo phiên mới 🤖"
     )
 
 async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -108,33 +106,33 @@ async def taixiu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Không thể lấy dữ liệu"); 
         return
     save(phien, ketqua)
-    await update.message.reply_text(build_msg(phien, ketqua), parse_mode="Markdown")
+    await update.message.reply_text(build_msg(phien, ketqua))
 
 # ===== AUTO GỬI THEO PHIÊN =====
-async def job_check_phien(context: ContextTypes.DEFAULT_TYPE):
+async def auto_check(app):
     global last_phien
-    phien, ketqua = get_data()
-    if not phien or phien == last_phien: 
-        return
-    last_phien = phien
-    save(phien, ketqua)
-    try:
-        await context.bot.send_message(GROUP_ID, build_msg(phien, ketqua), parse_mode="Markdown")
-        print(f"[✅] {phien} ({ketqua}) gửi thành công")
-    except Exception as e:
-        print(f"[❌] Lỗi gửi {phien}: {e}")
+    while True:
+        await asyncio.sleep(CHECK_INTERVAL)
+        phien, ketqua = get_data()
+        if not phien or phien == last_phien:
+            continue
+        last_phien = phien
+        save(phien, ketqua)
+        try:
+            await app.bot.send_message(GROUP_ID, build_msg(phien, ketqua))
+            print(f"[✅] {phien} ({ketqua}) gửi thành công")
+        except Exception as e:
+            print(f"[❌] Lỗi gửi {phien}: {e}")
 
 # ===== CHẠY BOT =====
 if __name__=="__main__":
-    print("🚀 Khởi động bot Sunwin TX AI + Alert (auto theo phiên)...")
-    keep_alive()  # Keep-Alive Render
+    print("🚀 Khởi động bot Sunwin TX AI + Alert...")
+    keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("taixiu", taixiu))
 
-    # Tạo job queue auto kiểm tra phiên mới
-    jq = app.job_queue
-    jq.run_repeating(job_check_phien, interval=CHECK_INTERVAL, first=0)
-
+    # Tạo task async auto gửi theo phiên
+    asyncio.get_event_loop().create_task(auto_check(app))
     app.run_polling()
     
