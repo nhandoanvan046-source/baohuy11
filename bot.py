@@ -2,7 +2,7 @@ import json
 import random
 import os
 import requests
-import time
+import asyncio
 from typing import List, Dict, Any, Tuple
 from telegram import Bot
 from keep_alive import keep_alive   # giữ bot sống khi deploy
@@ -189,13 +189,13 @@ def build_message(phien, kq, predict, conf, debug, dice, total):
         f"🔍 Đọc cầu: {cau_text}"
     )
 
-# ======= Auto Polling =========
-def main():
+# ======= Auto Polling (async) =========
+async def main():
     bot = Bot(BOT_TOKEN)
     last_phien = None
     model = load_model()
 
-    print("🤖 Bot is running...")
+    print("🤖 Bot is running (async)...")
 
     while True:
         try:
@@ -216,7 +216,7 @@ def main():
                     total = sum(dice)
 
                     msg = build_message(phien, kq, predict, conf, debug, dice, total)
-                    bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode="HTML")
+                    await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode="HTML")
 
                     update_model(model, predict, kq)
                     last_phien = phien
@@ -225,12 +225,13 @@ def main():
             error_msg = f"❌ Lỗi API: {e}"
             print(error_msg)
             try:
-                bot.send_message(chat_id=CHAT_ID, text=error_msg)
+                await bot.send_message(chat_id=CHAT_ID, text=error_msg)
             except:
                 pass
 
-        time.sleep(POLL_INTERVAL)
+        await asyncio.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":
     keep_alive()   # giữ cho bot chạy 24/7
-    main()
+    asyncio.run(main())
+                
