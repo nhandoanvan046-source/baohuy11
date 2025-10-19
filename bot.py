@@ -5,11 +5,11 @@ import requests
 import time
 from typing import List, Dict, Any, Tuple
 from telegram import Bot
-from keep_alive import keep_alive   # file keep_alive.py riêng để giữ bot sống
+from keep_alive import keep_alive   # giữ bot sống khi deploy
 
 # ================= CONFIG =================
-BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"   # <-- THAY token bot Telegram
-CHAT_ID = -1002666964512                # ID nhóm chat Telegram
+BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"   # ⚠️ Thay bằng token bot của bạn
+CHAT_ID = -1002666964512            # ID nhóm chat Telegram
 HISTORY_FILE = "history.json"
 MODEL_FILE = "model.json"
 LEARN_N = 20
@@ -18,7 +18,6 @@ API_URL = "https://sunwinsaygex.onrender.com/api/taixiu/sunwin"
 POLL_INTERVAL = 15   # giây
 # ==========================================
 
-
 # ======= Lưu & đọc dữ liệu =========
 def load_history() -> List[Dict[str, Any]]:
     if os.path.exists(HISTORY_FILE):
@@ -26,11 +25,9 @@ def load_history() -> List[Dict[str, Any]]:
             return json.load(f)
     return []
 
-
 def save_history(history: List[Dict[str, Any]]):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
-
 
 def load_model() -> Dict[str, Any]:
     if os.path.exists(MODEL_FILE):
@@ -38,25 +35,22 @@ def load_model() -> Dict[str, Any]:
             return json.load(f)
     return {
         "weights": {"pattern": 1.0, "avg": 1.0, "freq": 1.0, "streak": 1.0},
-        "stats": {"win": 0, "lose": 0},
-        "history_acc": []
+        "stats": {"win": 0, "lose": 0}
     }
-
 
 def save_model(model: Dict[str, Any]):
     with open(MODEL_FILE, "w", encoding="utf-8") as f:
         json.dump(model, f, ensure_ascii=False, indent=2)
 
-
 # ======= Đọc cầu =========
 def doc_cau(records: List[Dict[str, Any]], n: int = 12) -> str:
     if not records:
         return "Chưa có dữ liệu cầu."
-
+    
     seq = [r.get("ket_qua") for r in records[-n:] if r.get("ket_qua")]
     if len(seq) < 4:
         return "Chưa đủ dữ liệu để đọc cầu."
-
+    
     streak = 1
     last = seq[-1]
     for x in reversed(seq[:-1]):
@@ -64,17 +58,14 @@ def doc_cau(records: List[Dict[str, Any]], n: int = 12) -> str:
             streak += 1
         else:
             break
-
     if streak >= 4:
         return f"🔥 Cầu bệt {last}: {streak} phiên liên tiếp."
     if all(seq[i] != seq[i+1] for i in range(len(seq)-1)):
         return "♻️ Cầu đảo: Tài/Xỉu xen kẽ liên tục."
-    if seq.count("Tài") > seq.count("Xỉu"):
-        return f"📈 Xu hướng: Tài nhiều hơn ({seq.count('Tài')}:{seq.count('Xỉu')})"
-    if seq.count("Xỉu") > seq.count("Tài"):
-        return f"📉 Xu hướng: Xỉu nhiều hơn ({seq.count('Xỉu')}:{seq.count('Tài')})"
+    if streak == 1 and seq[-2] != last:
+        return f"⚡ Cầu {seq[-2]} vừa gãy, chuyển sang {last}."
+    
     return "⏳ Cầu chưa rõ ràng, cần theo dõi thêm."
-
 
 # ======= AI Dự đoán =========
 def ai_predict(records: List[Dict[str, Any]], model: Dict[str, Any]) -> Tuple[str, int, Dict[str, Any]]:
@@ -150,64 +141,61 @@ def ai_predict(records: List[Dict[str, Any]], model: Dict[str, Any]) -> Tuple[st
     }
     return predict, confidence, debug
 
+# ======= Dự đoán xúc xắc =========
+def predict_dice(prob_tai: float) -> List[int]:
+    if prob_tai >= 50:
+        total = random.randint(11, 17)
+    else:
+        total = random.randint(4, 10)
 
-# ======= AI Tự học thông minh =========
-def update_model(model: Dict[str, Any], predict: str, actual: str, debug: Dict[str, Any]):
+    dice = []
+    for i in range(2):
+        val = random.randint(1, min(6, total - 1))
+        dice.append(val)
+        total -= val
+    dice.append(max(1, min(6, total)))
+    random.shuffle(dice)
+    return dice
+
+# ======= Cập nhật mô hình =========
+def update_model(model: Dict[str, Any], predict: str, actual: str):
     if predict == actual:
         model["stats"]["win"] += 1
+        for k in model["weights"]:
+            model["weights"][k] = round(min(3.0, model["weights"][k] * 1.05), 2)
     else:
         model["stats"]["lose"] += 1
-
-    lr = 0.03       # learning rate
-    momentum = 0.9
-    target = 1 if actual == "Tài" else 0
-    prob_tai = debug.get("prob_tai", 50) / 100
-    error = target - prob_tai
-
-    if "velocity" not in model:
-        model["velocity"] = {k: 0.0 for k in model["weights"].keys()}
-
-    for k in model["weights"]:
-        grad = error * (prob_tai - 0.5)
-        model["velocity"][k] = momentum * model["velocity"][k] + lr * grad
-        model["weights"][k] += model["velocity"][k]
-        model["weights"][k] = round(max(0.5, min(3.0, model["weights"][k])), 3)
+        for k in model["weights"]:
+            model["weights"][k] = round(max(0.2, model["weights"][k] * 0.95), 2)
 
     total = model["stats"]["win"] + model["stats"]["lose"]
-    acc = round(model["stats"]["win"] / total * 100, 2) if total else 0
-    model.setdefault("history_acc", []).append(acc)
-    if len(model["history_acc"]) > 100:
-        model["history_acc"] = model["history_acc"][-100:]
-
-    print(f"[AI Learning] ✅ Win: {model['stats']['win']} ❌ Lose: {model['stats']['lose']} | Winrate: {acc:.1f}%")
+    winrate = model["stats"]["win"] / total * 100 if total else 0
+    print(f"[Auto-Learning] ✅ Win: {model['stats']['win']} ❌ Lose: {model['stats']['lose']} | Winrate: {winrate:.1f}%")
     save_model(model)
-
 
 # ======= Build Message =========
 def build_message(phien, kq, predict, conf, debug, dice, total):
     cau_text = doc_cau(load_history())
     return (
-        f"📣 <b>Phiên {phien}</b> — Kết quả: <b>{kq}</b>\n\n"
+        f"📣 Phiên mới: <b>{phien}</b> — Kết quả: <b>{kq}</b>\n\n"
         f"🤖 AI dự đoán: <u>{predict}</u> ({conf}%)\n"
-        f"🎲 Gợi ý xúc xắc: {dice} → Tổng {total}\n\n"
+        f"🎲 Dự đoán xúc xắc: {dice} → Tổng {total}\n\n"
         f"📊 Phân tích:\n"
         f"- Trung bình tổng: {debug.get('avg_total')}\n"
         f"- Tần suất 10 gần nhất: {debug.get('freq_last10')}\n"
         f"- Chuỗi hiện tại: {debug.get('last_streak')}\n"
-        f"- Xác suất Tài: {debug.get('prob_tai')}\n"
+        f"- Xác suất Tài: {debug.get('prob_tai')}%\n"
         f"- Trọng số: {debug.get('weights')}\n\n"
         f"🔍 Đọc cầu: {cau_text}"
     )
 
-
 # ======= Auto Polling =========
 def main():
-    keep_alive()
     bot = Bot(BOT_TOKEN)
     last_phien = None
     model = load_model()
 
-    print("🤖 Bot is running with smart AI learning...")
+    print("🤖 Bot is running...")
 
     while True:
         try:
@@ -224,28 +212,25 @@ def main():
                     save_history(history)
 
                     predict, conf, debug = ai_predict(history, model)
-                    dice = [random.randint(1, 6) for _ in range(3)]
+                    dice = predict_dice(debug["prob_tai"])
                     total = sum(dice)
 
                     msg = build_message(phien, kq, predict, conf, debug, dice, total)
                     bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode="HTML")
 
-                    # cập nhật mô hình
-                    update_model(model, predict, kq, debug)
-
+                    update_model(model, predict, kq)
                     last_phien = phien
 
         except Exception as e:
-            error_msg = f"⚠️ Lỗi bot ({time.strftime('%H:%M:%S')}): {str(e)}"
+            error_msg = f"❌ Lỗi API: {e}"
             print(error_msg)
             try:
                 bot.send_message(chat_id=CHAT_ID, text=error_msg)
             except:
-                print("⚠️ Không gửi được lỗi về Telegram.")
+                pass
 
         time.sleep(POLL_INTERVAL)
 
-
 if __name__ == "__main__":
+    keep_alive()   # giữ cho bot chạy 24/7
     main()
-        
