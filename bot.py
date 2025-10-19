@@ -21,7 +21,7 @@ nest_asyncio.apply()
 
 # ---------------- CONFIG ----------------
 BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"  # <-- Đã gắn token bạn cung cấp
-GROUP_ID = -1001234567890   # <-- THAY BẰNG ID NHÓM của bạn (ví dụ: -100xxxxxxxxxx)
+GROUP_ID = -1002666964512   # <-- THAY BẰNG ID NHÓM của bạn (ví dụ: -100xxxxxxxxxx)
 API_URL = "https://sunwinsaygex.onrender.com/api/taixiu/sunwin"
 
 HISTORY_FILE = "history.json"
