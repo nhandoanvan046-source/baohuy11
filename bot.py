@@ -8,7 +8,7 @@ from telegram import Bot
 from keep_alive import keep_alive   # file keep_alive.py riêng để giữ bot sống
 
 # ================= CONFIG =================
-BOT_TOKEN = "PUT_YOUR_NEW_TOKEN_HERE"   # <-- THAY token bot Telegram
+BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"   # <-- THAY token bot Telegram
 CHAT_ID = -1002666964512                # ID nhóm chat Telegram
 HISTORY_FILE = "history.json"
 MODEL_FILE = "model.json"
