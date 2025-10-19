@@ -5,11 +5,11 @@ import requests
 import time
 from typing import List, Dict, Any, Tuple
 from telegram import Bot
-from keep_alive import keep_alive
+from keep_alive import keep_alive   # file keep_alive.py riêng để giữ bot sống
 
 # ================= CONFIG =================
-BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"   # Token bot
-CHAT_ID = -1002666964512               # ID nhóm chat Telegram
+BOT_TOKEN = "PUT_YOUR_NEW_TOKEN_HERE"   # <-- THAY token bot Telegram
+CHAT_ID = -1002666964512                # ID nhóm chat Telegram
 HISTORY_FILE = "history.json"
 MODEL_FILE = "model.json"
 LEARN_N = 20
@@ -39,7 +39,6 @@ def load_model() -> Dict[str, Any]:
     return {
         "weights": {"pattern": 1.0, "avg": 1.0, "freq": 1.0, "streak": 1.0},
         "stats": {"win": 0, "lose": 0},
-        "velocity": {"pattern": 0, "avg": 0, "freq": 0, "streak": 0},
         "history_acc": []
     }
 
@@ -50,14 +49,14 @@ def save_model(model: Dict[str, Any]):
 
 
 # ======= Đọc cầu =========
-def doc_cau(records: List[Dict[str, Any]], n: int = 10) -> str:
+def doc_cau(records: List[Dict[str, Any]], n: int = 12) -> str:
     if not records:
         return "Chưa có dữ liệu cầu."
-    
+
     seq = [r.get("ket_qua") for r in records[-n:] if r.get("ket_qua")]
     if len(seq) < 4:
         return "Chưa đủ dữ liệu để đọc cầu."
-    
+
     streak = 1
     last = seq[-1]
     for x in reversed(seq[:-1]):
@@ -65,14 +64,16 @@ def doc_cau(records: List[Dict[str, Any]], n: int = 10) -> str:
             streak += 1
         else:
             break
+
     if streak >= 4:
         return f"🔥 Cầu bệt {last}: {streak} phiên liên tiếp."
     if all(seq[i] != seq[i+1] for i in range(len(seq)-1)):
         return "♻️ Cầu đảo: Tài/Xỉu xen kẽ liên tục."
-    if streak == 1 and seq[-2] != last:
-        return f"⚡ Cầu {seq[-2]} vừa gãy, chuyển sang {last}."
-    
-    return "⏳ Cầu không rõ ràng, theo dõi thêm."
+    if seq.count("Tài") > seq.count("Xỉu"):
+        return f"📈 Xu hướng: Tài nhiều hơn ({seq.count('Tài')}:{seq.count('Xỉu')})"
+    if seq.count("Xỉu") > seq.count("Tài"):
+        return f"📉 Xu hướng: Xỉu nhiều hơn ({seq.count('Xỉu')}:{seq.count('Tài')})"
+    return "⏳ Cầu chưa rõ ràng, cần theo dõi thêm."
 
 
 # ======= AI Dự đoán =========
@@ -125,7 +126,7 @@ def ai_predict(records: List[Dict[str, Any]], model: Dict[str, Any]) -> Tuple[st
     else:
         streak_score = 50 + min(20, streak * 5)
 
-    # --------- 5. Kết hợp theo trọng số ---------
+    # --------- 5. Kết hợp ---------
     probs = []
     if pattern_score is not None:
         probs.append(pattern_score * weights["pattern"])
@@ -157,8 +158,7 @@ def update_model(model: Dict[str, Any], predict: str, actual: str, debug: Dict[s
     else:
         model["stats"]["lose"] += 1
 
-    # Gradient-like update
-    lr = 0.03
+    lr = 0.03       # learning rate
     momentum = 0.9
     target = 1 if actual == "Tài" else 0
     prob_tai = debug.get("prob_tai", 50) / 100
@@ -173,7 +173,6 @@ def update_model(model: Dict[str, Any], predict: str, actual: str, debug: Dict[s
         model["weights"][k] += model["velocity"][k]
         model["weights"][k] = round(max(0.5, min(3.0, model["weights"][k])), 3)
 
-    # Winrate history
     total = model["stats"]["win"] + model["stats"]["lose"]
     acc = round(model["stats"]["win"] / total * 100, 2) if total else 0
     model.setdefault("history_acc", []).append(acc)
@@ -188,7 +187,7 @@ def update_model(model: Dict[str, Any], predict: str, actual: str, debug: Dict[s
 def build_message(phien, kq, predict, conf, debug, dice, total):
     cau_text = doc_cau(load_history())
     return (
-        f"📣 Phiên mới: <b>{phien}</b> — Kết quả: <b>{kq}</b>\n\n"
+        f"📣 <b>Phiên {phien}</b> — Kết quả: <b>{kq}</b>\n\n"
         f"🤖 AI dự đoán: <u>{predict}</u> ({conf}%)\n"
         f"🎲 Gợi ý xúc xắc: {dice} → Tổng {total}\n\n"
         f"📊 Phân tích:\n"
@@ -237,11 +236,16 @@ def main():
                     last_phien = phien
 
         except Exception as e:
-            print("❌ Lỗi API:", e)
+            error_msg = f"⚠️ Lỗi bot ({time.strftime('%H:%M:%S')}): {str(e)}"
+            print(error_msg)
+            try:
+                bot.send_message(chat_id=CHAT_ID, text=error_msg)
+            except:
+                print("⚠️ Không gửi được lỗi về Telegram.")
 
         time.sleep(POLL_INTERVAL)
 
 
 if __name__ == "__main__":
     main()
-    
+        
