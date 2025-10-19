@@ -8,7 +8,7 @@ from telegram import Bot
 from keep_alive import keep_alive
 
 # ================= CONFIG =================
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"   # Token bot
+BOT_TOKEN = "6367532329:AAFUobZTDtBrWWfjXanXHny9mBRN0eHyAGs"   # Token bot
 CHAT_ID = -1002666964512               # ID nhóm chat Telegram
 HISTORY_FILE = "history.json"
 MODEL_FILE = "model.json"
