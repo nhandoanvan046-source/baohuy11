@@ -8,3 +8,6 @@ fastapi
 uvicorn
 aiohttp
 nest_asyncio
+pandas
+numpy
+scikit-learn
