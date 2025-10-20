@@ -1,21 +1,21 @@
 {
-  "total_games": 123,
-  "wins": 68,
-  "losses": 55,
-  "streak": 2,
-  "last_result": "win",
-  "style": "tự tin",
-  "preferred_cau": "cầu bệt",
+  "weights": {
+    "pattern": 1.0,
+    "avg": 1.0,
+    "freq": 1.0,
+    "streak": 1.0,
+    "markov": 1.0,
+    "chanle": 1.0,
+    "dice": 1.0
+  },
   "stats": {
-    "tai": 62,
-    "xiu": 61
+    "win": 0,
+    "lose": 0,
+    "memory": [],
+    "total": 0
   },
-  "patterns": {
-    "cau_bet": 15,
-    "cau_dao": 22,
-    "cau_1_1": 18,
-    "cau_gay": 8
-  },
-  "mood": "phấn khích",
-  "last_update": "2025-10-20 22:15:30"
+  "money": {
+    "base": 10,
+    "current_bet": 10
+  }
 }
