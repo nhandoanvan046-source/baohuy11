@@ -1,0 +1,27 @@
+UserA: Tài chắc rồi
+AI hỏi: 🤔 Theo anh em thì ván này ra gì?
+
+AI dự đoán: Phiên 10234 — Kết quả: Tài | Dự đoán: Tài (72%) | Lý do: Ôm cầu bệt Tài
+AI: 🔥 Ăn nhẹ nhàng, cầu bệt đúng quá rồi!
+
+UserB: Xỉu mới đúng chứ
+AI hỏi: ❓ Mọi người nghĩ cầu này tiếp tục không?
+
+AI dự đoán: Phiên 10235 — Kết quả: Xỉu | Dự đoán: Tài (55%) | Lý do: Thống kê 10 ván gần đây: 7 Tài
+AI: 😅 Hơi đen, cầu gãy bất ngờ!
+
+UserC: Cầu này dễ đảo 1-1 lắm
+AI hỏi: 👀 Có ai thấy cầu bệt không?
+
+AI dự đoán: Phiên 10236 — Kết quả: Tài | Dự đoán: Xỉu (68%) | Lý do: Cầu 1-1, đánh ngược
+AI: 🤔 Sai một ly, đi một dặm… thua rồi!
+
+AI hỏi: 🤔 Theo anh em thì ván này ra gì?
+UserD: Tôi nghĩ Xỉu
+
+AI dự đoán: Phiên 10237 — Kết quả: Xỉu | Dự đoán: Xỉu (65%) | Lý do: Cầu gãy, tôi chuyển cầu
+AI: 😎 Thấy chưa, chuyển cầu hợp lý, win ngay!
+
+❌ Lỗi API: ConnectionError - timeout khi gọi https://sunwinsaygex.onrender.com/api/taixiu/sunwin
+AI: 😤 Mạng lag quá, chờ tí anh em ơi...
+
